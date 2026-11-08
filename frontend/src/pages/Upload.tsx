@@ -33,7 +33,8 @@ export default function Upload({ go }: { go: (r: Route) => void }) {
     setStatus({ kind: "info", text: "正在解析简历并抽取档案……" });
     try {
       // 抽取带 user_id 后，后端会把原文 chunks 存成一条简历记录，后续确认/草稿要用
-      let userId = profile.backendUserId;
+      // 已登录就用真实账户 id；没登录才建一个临时账户挂文件
+      let userId = user?.id ?? profile.backendUserId;
       if (!userId) {
         const created = await createUser(user?.name ?? "求职者");
         userId = created.id;
@@ -44,8 +45,12 @@ export default function Upload({ go }: { go: (r: Route) => void }) {
       try {
         result = await extractResume(file, userId);
       } catch (err) {
-        // 本地存了 userId 但后端数据库被重置时，重新建一个用户再试一次
+        // 本地存了 userId 但后端数据库被重置时：未登录可以重建临时账户，
+        // 已登录不能偷换成演示账户，否则画像会挂到别人名下
         if (err instanceof ApiError && err.status === 404) {
+          if (user?.id) {
+            throw new Error("后端找不到这个账户（数据库可能被重置），请退出后重新登录。");
+          }
           const created = await createUser(user?.name ?? "求职者");
           userId = created.id;
           patch({ backendUserId: userId });
@@ -435,6 +440,13 @@ export default function Upload({ go }: { go: (r: Route) => void }) {
               onClick={() => go("jobs")}
             >
               目标岗位 / 城市 / 类型 → 去岗位页设定
+            </button>
+            <button
+              className="linkish mt-8"
+              type="button"
+              onClick={() => go("profile-info")}
+            >
+              个人信息补全清单 →（后端按规则算的待补项）
             </button>
           </aside>
         </div>

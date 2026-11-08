@@ -12,14 +12,17 @@ import Report from "./pages/Report";
 import Compare from "./pages/Compare";
 import ResumeDraft from "./pages/ResumeDraft";
 import Purchase from "./pages/Purchase";
+import PersonalInfo from "./pages/PersonalInfo";
 import Placeholder from "./pages/Placeholder";
 
+/** 页面路由；profile-info 是后端「还缺什么」清单的入口 */
 export type Route =
   | "intro"
   | "home"
   | "upload"
   | "resume"
   | "resume-draft"
+  | "profile-info"
   | "jobs"
   | "job"
   | "interview"
@@ -34,6 +37,7 @@ const TITLES: Record<Route, string> = {
   upload: "上传 · 建立求职档案",
   resume: "简历 · 选择方式",
   "resume-draft": "简历 · 草稿",
+  "profile-info": "个人信息 · 补全清单",
   jobs: "岗位 · 搜索结果",
   job: "岗位 · 匹配详情",
   interview: "面试 · 进行中",
@@ -50,7 +54,8 @@ function readRoute(): Route {
 
 export default function App() {
   const [route, setRoute] = useState<Route>(readRoute);
-  const [jobId, setJobId] = useState("j1");
+  // 还没选岗位时保持空值，而不是默认一个假 id
+  const [jobId, setJobId] = useState<string | null>(null);
 
   useEffect(() => {
     const onHash = () => setRoute(readRoute());
@@ -75,6 +80,8 @@ export default function App() {
         <Resume go={go} />
       ) : route === "resume-draft" ? (
         <ResumeDraft go={go} />
+      ) : route === "profile-info" ? (
+        <PersonalInfo go={go} />
       ) : route === "jobs" ? (
         <Jobs
           go={go}
@@ -84,11 +91,11 @@ export default function App() {
           }}
         />
       ) : route === "job" ? (
-        <JobDetail go={go} jobId={jobId} />
+        <JobDetail go={go} jobId={jobId ?? ""} />
       ) : route === "archive" ? (
         <Archive go={go} />
       ) : route === "interview" ? (
-        <Interview go={go} jobId={jobId} />
+        <Interview go={go} jobId={jobId ?? ""} />
       ) : route === "report" ? (
         <Report go={go} />
       ) : route === "purchase" ? (

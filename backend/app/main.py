@@ -39,8 +39,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=_cors_origin_pattern(),
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    # PUT 是 /profiles/{id}/personal-info 用的；Authorization 是登录后每个请求都要带的
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 app.include_router(router, prefix="/api/v1", tags=["resources"])
 app.include_router(health_router)

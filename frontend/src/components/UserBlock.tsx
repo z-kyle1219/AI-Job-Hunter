@@ -8,14 +8,12 @@ type Props = {
 };
 
 export default function UserBlock({ onLogin, go }: Props) {
-  const { user, setUser } = useProfile();
+  const { user, signOut } = useProfile();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState("");
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    setDraft(user?.name ?? "");
     const onDown = (e: MouseEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
     };
@@ -28,7 +26,7 @@ export default function UserBlock({ onLogin, go }: Props) {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, user?.name]);
+  }, [open]);
 
   if (!user) {
     return (
@@ -37,13 +35,6 @@ export default function UserBlock({ onLogin, go }: Props) {
       </button>
     );
   }
-
-  const save = () => {
-    const n = draft.trim();
-    if (!n) return;
-    setUser({ ...user, name: n });
-    setOpen(false);
-  };
 
   return (
     <div className="account" ref={box}>
@@ -71,35 +62,29 @@ export default function UserBlock({ onLogin, go }: Props) {
               {user.name.slice(0, 1)}
             </span>
             <div style={{ flex: 1 }}>
-              <div className="eyebrow">显示名</div>
-              <input
-                className="name-input"
-                value={draft}
-                aria-label="显示名"
-                placeholder="你的名字"
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") save();
-                }}
-              />
+              <div className="eyebrow">已登录</div>
+              <div className="h3" style={{ fontSize: 15 }}>
+                {user.name}
+              </div>
             </div>
           </div>
 
           <div className="account-meta">
             <span className="eyebrow">账号</span>
-            <span className="fs-13">{user.account ?? "未绑定手机号 / 邮箱"}</span>
+            <span className="fs-13">{user.account ?? "未绑定邮箱"}</span>
           </div>
 
-          <button
-            className="pill sm solid mt-16"
-            onClick={save}
-            disabled={!draft.trim() || draft.trim() === user.name}
-            type="button"
-          >
-            保存名字
-          </button>
-
           <div className="account-links">
+            <button
+              className="linkish"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                go("profile-info");
+              }}
+            >
+              个人信息补全
+            </button>
             <button
               className="linkish"
               type="button"
@@ -124,8 +109,8 @@ export default function UserBlock({ onLogin, go }: Props) {
               className="linkish"
               type="button"
               onClick={() => {
-                setUser(null);
                 setOpen(false);
+                signOut();
               }}
             >
               退出登录

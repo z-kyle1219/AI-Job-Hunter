@@ -68,9 +68,31 @@ class CorsTest(unittest.IsolatedAsyncioTestCase):
             response["headers"]["access-control-allow-origin"],
             "http://127.0.0.1:3000",
         )
-        self.assertEqual(response["headers"]["access-control-allow-methods"], "GET, POST, OPTIONS")
+        # PUT 是 /profiles/{id}/personal-info 要用的，不能只放 GET/POST
+        self.assertEqual(
+            response["headers"]["access-control-allow-methods"],
+            "GET, POST, PUT, OPTIONS",
+        )
         allowed_headers = response["headers"]["access-control-allow-headers"].lower()
         self.assertIn("content-type", allowed_headers)
+
+    async def test_put_preflight_allows_authorization(self) -> None:
+        """改个人信息带 Bearer 令牌，预检必须放行 Authorization。"""
+
+        response = await _request(
+            "OPTIONS",
+            "/api/v1/profiles/p1/personal-info",
+            [
+                (b"origin", b"http://localhost:5173"),
+                (b"access-control-request-method", b"PUT"),
+                (b"access-control-request-headers", b"authorization,content-type"),
+            ],
+        )
+
+        self.assertEqual(response["status"], 200)
+        allowed_headers = response["headers"]["access-control-allow-headers"].lower()
+        self.assertIn("authorization", allowed_headers)
+        self.assertIn("PUT", response["headers"]["access-control-allow-methods"])
 
     async def test_remote_origin_is_rejected(self) -> None:
         response = await _request(

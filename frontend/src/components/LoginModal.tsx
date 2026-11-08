@@ -4,11 +4,10 @@ import AuthForm from "./AuthForm";
 type Props = {
   open: boolean;
   onClose: () => void;
-  onDone: (name: string, account: string) => void;
   onNext: () => void;
 };
 
-export default function LoginModal({ open, onClose, onDone, onNext }: Props) {
+export default function LoginModal({ open, onClose, onNext }: Props) {
   const boxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,7 +49,7 @@ export default function LoginModal({ open, onClose, onDone, onNext }: Props) {
         <p className="small mt-8">登录后可上传简历与项目资料，建立你的求职档案。</p>
 
         <div className="mt-16">
-          <AuthForm onDone={(name, account) => onDone(name, account)} onNext={onNext} />
+          <AuthForm onNext={onNext} />
         </div>
 
         <p className="small mt-16">继续即表示同意《服务条款》与《隐私政策》</p>

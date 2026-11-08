@@ -1,250 +1,258 @@
+import { useState } from "react";
 import Top from "../components/Top";
 import Band from "../components/Band";
 import { useProfile } from "../store";
-import { JOBS } from "../jobs";
+import { ApiError, evaluateInterviewSession } from "../api";
 import type { Route } from "../App";
 
 type Props = {
   go: (r: Route) => void;
 };
 
-const clamp = (n: number) => Math.max(1, Math.min(5, Number(n.toFixed(1))));
+const VERDICT_LABEL: Record<string, string> = {
+  answered: "答到了",
+  surface: "只到表面",
+  unanswered: "没答到",
+};
+
+const VERDICT_CLASS: Record<string, string> = {
+  answered: "tag",
+  surface: "tag dash",
+  unanswered: "tag red",
+};
 
 export default function Report({ go }: Props) {
-  const { interview, unlocked } = useProfile();
+  const { interview, evaluation, unlocked, setEvaluation, setInterview } = useProfile();
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const answers = interview?.answers ?? [];
-  const job = JOBS.find((j) => j.id === interview?.jobId) ?? JOBS[0];
+  const seconds = interview?.seconds ?? 0;
+  const coverage = evaluation ? Math.round(evaluation.coverage * 100) : null;
 
-  const answered = answers.filter((a) => a.text.length > 0);
-  const noAnswer = answered.length === 0;
-  const avg = answered.length
-    ? answered.reduce((s, a) => s + a.text.length, 0) / answered.length
-    : 0;
-  const hasNumber = answered.some((a) => /[0-9]/.test(a.text));
-
-  const dims = noAnswer
-    ? [
-        { name: "正确性", score: 0, why: "本场没有作答记录，无法评估。" },
-        { name: "完整性", score: 0, why: "本场没有作答记录，无法评估。" },
-        { name: "逻辑性", score: 0, why: "本场没有作答记录，无法评估。" },
-        { name: "细节与真实性", score: 0, why: "本场没有作答记录，无法评估。" },
-        { name: "表达清晰度", score: 0, why: "本场没有作答记录，无法评估。" },
-      ]
-    : [
-        {
-          name: "正确性",
-          score: clamp(3.4 + Math.min(1, avg / 220)),
-          why: "结论方向基本正确，个别概念还可以更准确。",
-        },
-        {
-          name: "完整性",
-          score: clamp(1.6 + avg / 90),
-          why: `平均每次回答 ${Math.round(avg)} 字，${
-            avg < 120 ? "多数只讲了做法，没讲结果。" : "结构完整。"
-          }`,
-        },
-        {
-          name: "逻辑性",
-          score: clamp(3.6 + Math.min(0.9, avg / 400)),
-          why: "回答顺序基本按「背景 → 做法」展开。",
-        },
-        {
-          name: "细节与真实性",
-          score: clamp(hasNumber ? 3.6 : 2.2),
-          why: hasNumber
-            ? "出现了具体数字，可信度较好。"
-            : "全程没有出现任何具体数字，被追问会站不住。",
-        },
-        {
-          name: "表达清晰度",
-          score: clamp(3.2 + Math.min(1.2, avg / 300)),
-          why: avg > 260 ? "句子偏长，建议先说结论。" : "表达简洁，重点比较好抓。",
-        },
-      ];
-
-  const total = noAnswer ? 0 : dims.reduce((s, d) => s + d.score, 0) / dims.length;
-
-  const weak = [
-    !hasNumber && {
-      title: "缺量化结果",
-      text: "整场没有出现具体数字，结果部分说不清",
-    },
-    answered.length < 3 && {
-      title: "作答覆盖不足",
-      text: `只完整回答了 ${answered.length} 道题，后面没法评估`,
-    },
-    avg > 0 &&
-      avg < 90 && {
-        title: "回答偏短",
-        text: `平均 ${Math.round(avg)} 字，面试官会继续追问`,
-      },
-  ].filter(Boolean) as { title: string; text: string }[];
-
-  const secs = interview?.seconds ?? 0;
+  async function retryReview() {
+    if (!interview?.sessionId || retrying) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const review = await evaluateInterviewSession(interview.sessionId, true);
+      setEvaluation(review);
+      setInterview({ ...interview, coverage: review.coverage, overall: review.overall });
+    } catch (err) {
+      setRetryError(err instanceof ApiError ? err.message : (err as Error).message);
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <div className="shell" id="main">
-      <Top
-        onHome={() => go("home")}
-        back={{ label: "返回主页", onClick: () => go("home") }}
-      />
+      <Top onHome={() => go("home")} back={{ label: "返回主页", onClick: () => go("home") }} />
 
       <main className="page">
         <div className="eyebrow">
-          {job.company} · {job.title}
+          {interview?.company || interview?.jobTitle
+            ? `${interview?.company ?? ""}${interview?.company && interview?.jobTitle ? " · " : ""}${
+                interview?.jobTitle ?? ""
+              }`
+            : "模拟面试"}
         </div>
         <h1 className="h1 mt-16">面试报告</h1>
         <p className="lead">
-          {answers.length} 题 · {Math.floor(secs / 60)} 分 {secs % 60} 秒
+          {evaluation
+            ? `${answers.length} 题 · ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒 · 需求覆盖 ${coverage}%`
+            : interview
+              ? `${answers.length} 题 · ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒 · 复盘未生成`
+              : "还没有面试记录"}
         </p>
 
-        <div className="verdict mt-32">
-          <div className="v-num num">{noAnswer ? "—" : total.toFixed(1)}</div>
-          <div className="v-txt">
-            <div className="eyebrow">均分 / 5</div>
-            <p className="mt-8">
-              {noAnswer
-                ? "本场没有作答记录，无法评估。"
-                : `${answers.length} 题 · 均分 ${total.toFixed(1)}`}
+        {!evaluation ? (
+          <div className="panel mt-32">
+            <div className="eyebrow">复盘 · 0 条</div>
+            <p className="h3 mt-8">
+              {interview ? "这场面试的复盘没有生成" : "先做一场模拟面试，才有可复盘的内容"}
             </p>
-          </div>
-        </div>
-
-        <div className="mt-32" style={{ borderTop: "1.5px solid var(--ink)" }}>
-          {dims.map((d) => (
-            <div
-              key={d.name}
-              style={{ padding: "16px 0", borderBottom: "1px solid var(--line)" }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(96px, 160px) minmax(60px, 1fr) 64px",
-                  alignItems: "center",
-                  gap: 20,
-                }}
-              >
-                <span className="h3" style={{ fontSize: 15 }}>
-                  {d.name}
-                </span>
-                <span
-                  aria-hidden="true"
-                  style={{
-                    display: "block",
-                    height: 1,
-                    background: "var(--hair)",
-                    position: "relative",
-                  }}
+            <p className="small mt-8">
+              {interview
+                ? "复盘由模型逐条判定，失败通常是模型 Key 缺失或调用超时。可以再面一场，或稍后重试。"
+                : "报告里的每一条判定都引用你自己的原话，不会给一个无法复核的总分。"}
+            </p>
+            <div className="row wrap mt-24" style={{ gap: 10 }}>
+              {interview?.sessionId && (
+                <button
+                  className="pill solid"
+                  type="button"
+                  disabled={retrying}
+                  onClick={() => void retryReview()}
                 >
-                  <i
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      top: -1.5,
-                      display: "block",
-                      height: 4,
-                      width: noAnswer ? 0 : `${(d.score / 5) * 100}%`,
-                      background: "var(--ink)",
-                    }}
-                  />
-                </span>
-                <span className="num" style={{ textAlign: "right", fontSize: 22 }}>
-                  {noAnswer ? "—" : d.score.toFixed(1)}
+                  {retrying ? "正在重新复盘……" : "重新生成复盘"}
+                </button>
+              )}
+              <button className="pill solid" type="button" onClick={() => go("interview")}>
+                去面试
+              </button>
+              <button className="pill" type="button" onClick={() => go("jobs")}>
+                先挑个岗位
+              </button>
+            </div>
+            {retryError && (
+              <p className="small warn mt-8" role="alert">
+                {retryError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="verdict mt-32">
+              <div className="v-num num">
+                {coverage === null ? "—" : coverage}
+                <span className="muted" style={{ fontSize: "0.3em", letterSpacing: 0 }}>
+                  {" "}
+                  %
                 </span>
               </div>
-              {unlocked && (
-                <p className="small" style={{ marginTop: 6 }}>
-                  {d.why}
-                </p>
+              <div className="v-txt">
+                <div className="eyebrow">需求覆盖率 / 不是质量分</div>
+                <p className="mt-8">{evaluation.overall || "复盘没有给出总评。"}</p>
+              </div>
+            </div>
+
+            <div className="mt-32" style={{ borderTop: "1.5px solid var(--ink)" }}>
+              {evaluation.verdicts.map((verdict) => (
+                <div
+                  key={verdict.requirement_id}
+                  style={{ padding: "16px 0", borderBottom: "1px solid var(--line)" }}
+                >
+                  <div className="row between wrap" style={{ gap: 12, alignItems: "baseline" }}>
+                    <span className="h3" style={{ fontSize: 15 }}>
+                      {verdict.requirement_text || verdict.requirement_id}
+                    </span>
+                    <span className={VERDICT_CLASS[verdict.verdict] ?? "tag"}>
+                      {VERDICT_LABEL[verdict.verdict] ?? verdict.verdict}
+                    </span>
+                  </div>
+
+                  {unlocked && verdict.evidence && (
+                    <p className="small mt-8" style={{ borderLeft: "3px solid var(--line)", paddingLeft: 10 }}>
+                      你的原话：{verdict.evidence}
+                    </p>
+                  )}
+                  {unlocked && verdict.gap && <p className="small mt-8">缺口：{verdict.gap}</p>}
+                  {unlocked && verdict.suggestion && (
+                    <p className="small mt-8">怎么改：{verdict.suggestion}</p>
+                  )}
+                </div>
+              ))}
+              {evaluation.verdicts.length === 0 && (
+                <div style={{ padding: "16px 0", borderBottom: "1px solid var(--line)" }}>
+                  <span className="small">这场没有可比对的需求。</span>
+                </div>
               )}
             </div>
-          ))}
-        </div>
 
-        {unlocked ? (
-          <>
-            <div className="mt-48">
-              <div className="row between wrap" style={{ gap: 12 }}>
-                <h2 className="h2">薄弱点</h2>
-                <span className="eyebrow">{weak.length} 项</span>
-              </div>
-              <div className="mt-16" style={{ borderTop: "1.5px solid var(--ink)" }}>
-                {weak.length ? (
-                  weak.map((w) => (
-                    <div
-                      key={w.title}
-                      className="row between wrap"
-                      style={{
-                        gap: 20,
-                        padding: "18px 0",
-                        borderBottom: "1px solid var(--line)",
-                      }}
-                    >
-                      <div>
-                        <div className="h3">{w.title}</div>
-                        <div className="small">{w.text}</div>
-                      </div>
-                      <button
-                        className="pill sm"
-                        onClick={() => go("interview")}
-                        type="button"
-                      >
-                        重练
-                      </button>
+            {unlocked ? (
+              <>
+                {evaluation.strengths.length > 0 && (
+                  <div className="mt-48">
+                    <div className="row between wrap" style={{ gap: 12 }}>
+                      <h2 className="h2">答得住的</h2>
+                      <span className="eyebrow">{evaluation.strengths.length} 项</span>
                     </div>
-                  ))
-                ) : (
-                  <div
-                    className="row between wrap"
-                    style={{
-                      gap: 20,
-                      padding: "18px 0",
-                      borderBottom: "1px solid var(--line)",
-                    }}
-                  >
-                    <div>
-                      <div className="h3">没有明显短板</div>
-                      <div className="small">这场答得不错，可以换个岗位再来一场。</div>
+                    <div className="col-list mt-16">
+                      <ul>
+                        {evaluation.strengths.map((item, i) => (
+                          <li key={i}>
+                            <em>✓</em>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
 
-            <div className="row wrap mt-32" style={{ gap: 10 }}>
-              <button className="pill solid" onClick={() => go("interview")} type="button">
-                再练一次
-              </button>
-              <button className="pill" onClick={() => go("jobs")} type="button">
-                换个岗位
-              </button>
-              <button className="pill" onClick={() => go("archive")} type="button">
-                回到档案
-              </button>
-            </div>
+                <div className="mt-48">
+                  <div className="row between wrap" style={{ gap: 12 }}>
+                    <h2 className="h2">下一步怎么改</h2>
+                    <span className="eyebrow">{evaluation.suggestions.length} 项</span>
+                  </div>
+                  {evaluation.suggestions.length ? (
+                    <div className="mt-16" style={{ borderTop: "1.5px solid var(--ink)" }}>
+                      {evaluation.suggestions.map((item, i) => (
+                        <div
+                          key={i}
+                          className="row between wrap"
+                          style={{
+                            gap: 20,
+                            padding: "18px 0",
+                            borderBottom: "1px solid var(--line)",
+                          }}
+                        >
+                          <div>
+                            <div className="h3">{item}</div>
+                          </div>
+                          <button
+                            className="pill sm"
+                            type="button"
+                            onClick={() => go("interview")}
+                          >
+                            重练
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="small mt-8">这场没有被指出的短板，可以换个岗位再来一场。</p>
+                  )}
+                </div>
+
+                {evaluation.notes.length > 0 && (
+                  <p className="small mt-24">复盘备注：{evaluation.notes.join("；")}</p>
+                )}
+
+                <div className="row wrap mt-32" style={{ gap: 10 }}>
+                  <button className="pill solid" type="button" onClick={() => go("interview")}>
+                    再练一次
+                  </button>
+                  <button className="pill" type="button" onClick={() => go("jobs")}>
+                    换个岗位
+                  </button>
+                  <button className="pill" type="button" onClick={() => go("archive")}>
+                    回到档案
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="panel y mt-32">
+                <div className="eyebrow">完整报告 · 未解锁</div>
+                <p className="h2 mt-8">逐条判定已经给出，证据和改法还在后面。</p>
+                <p className="small mt-8">
+                  完整报告包含：每条要求引用的原话、缺口说明、逐项改法，以及下一步练习清单。
+                </p>
+                <button
+                  className="pill solid mt-24"
+                  onClick={() => go("purchase")}
+                  type="button"
+                >
+                  购买服务解锁全部 →
+                </button>
+              </div>
+            )}
           </>
-        ) : (
-          <div className="panel y mt-32">
-            <div className="eyebrow">完整报告 · 未解锁</div>
-            <p className="h2 mt-8">五维评分已经给出，改法还在后面。</p>
-            <p className="small mt-8">
-              完整报告包含：每项评分的依据与改法、薄弱点清单、每道题的追问记录，以及可导出的一页总结。
-            </p>
-            <button className="pill solid mt-24" onClick={() => go("purchase")} type="button">
-              购买服务解锁全部 →
-            </button>
-          </div>
         )}
       </main>
 
       <Band
         step={4}
         total={4}
-        label={`面试报告 · ${noAnswer ? "本场无作答" : `均分 ${total.toFixed(1)}`}`}
+        label={
+          coverage === null ? "面试报告 · 暂无复盘" : `面试报告 · 需求覆盖 ${coverage}%`
+        }
         action={
-          unlocked
-            ? { label: "回到档案", onClick: () => go("archive") }
-            : { label: "解锁完整报告", onClick: () => go("purchase") }
+          evaluation
+            ? unlocked
+              ? { label: "回到档案", onClick: () => go("archive") }
+              : { label: "解锁完整报告", onClick: () => go("purchase") }
+            : { label: "去面试", onClick: () => go("interview") }
         }
       />
     </div>

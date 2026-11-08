@@ -3,7 +3,6 @@ import Top from "../components/Top";
 import Band from "../components/Band";
 import UserBlock from "../components/UserBlock";
 import LoginModal from "../components/LoginModal";
-import { useProfile } from "../store";
 import type { Route } from "../App";
 
 const DESTS: {
@@ -33,7 +32,6 @@ const DESTS: {
 ];
 
 export default function Home({ go }: { go: (r: Route) => void }) {
-  const { setUser } = useProfile();
   const [loginOpen, setLoginOpen] = useState(false);
 
   return (
@@ -87,9 +85,6 @@ export default function Home({ go }: { go: (r: Route) => void }) {
       <LoginModal
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
-        onDone={(name, account) => {
-          setUser({ name, account });
-        }}
         onNext={() => {
           setLoginOpen(false);
           go("upload");

@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import Top from "../components/Top";
 import Band from "../components/Band";
 import { useProfile } from "../store";
 import { checklist } from "../types";
-import { sortedJobs } from "../jobs";
+import { listJobs } from "../api";
+import { toJobView, type JobView } from "../jobs";
 import type { Route } from "../App";
 
 type Props = {
@@ -10,43 +12,58 @@ type Props = {
 };
 
 export default function Archive({ go }: Props) {
-  const { profile } = useProfile();
+  const { profile, interview } = useProfile();
+  const [jobs, setJobs] = useState<JobView[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listJobs()
+      .then((rows) => {
+        if (!cancelled) setJobs(rows.map(toJobView));
+      })
+      .catch(() => {
+        if (!cancelled) setJobs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const items = checklist(profile);
   const done = items.filter((i) => i.done).length;
   const pct = Math.round((done / items.length) * 100);
 
-  const ranked = sortedJobs(profile);
-  const main = ranked[0];
+  const verified = jobs?.filter((job) => job.verify === "ok").length ?? 0;
   const gaps =
     done === 0
       ? []
-      : [
-          ...main.match.gap.map((t) => ({
-            kind: "缺证据",
-            text: `「${t}」在档案里没有可量化的结果`,
-          })),
-          ...main.match.fail.map((t) => ({
-            kind: "未覆盖",
-            text: `目标岗位要求的「${t}」还没有经历`,
-          })),
-        ].slice(0, 3);
+      : (profile.missingInformation ?? []).slice(0, 3).map((text) => ({
+          kind: "待补充",
+          text,
+        }));
 
-  /** mock：技能标签现在由项目名 + 简历存在与否拼出来，接后端后换成 skills[] */
-  const skills = [
-    ...(profile.resume ? ["React", "TypeScript", "Vite"] : []),
-    ...profile.projects.map((p) => p.name),
-    ...(profile.stories.trim() ? ["主观经历"] : []),
-  ];
+  const skills = profile.skills?.length
+    ? profile.skills
+    : profile.projects.map((p) => p.name);
   const shown = skills.slice(0, 8);
   const rest = skills.length - shown.length;
 
   const resumeStatus = profile.resume
     ? `已上传 · ${profile.resume.pages} 页`
     : "还没有上传";
-  const jobsStatus = profile.target.city || profile.target.role
-    ? `已匹配 ${ranked.length} 个 · 最高 ${ranked[0].match.score} 分`
-    : "还没有设定条件";
-  const interviewStatus = "未开始";
+  const jobsStatus =
+    jobs === null
+      ? profile.backendUserId
+        ? "岗位库读取失败"
+        : "未登录 · 岗位库需要后端"
+      : `在库 ${jobs.length} 个 · 已核验 ${verified} 个`;
+  const interviewStatus = interview?.sessionId
+    ? `已完成 · ${
+        interview.coverage != null
+          ? `需求覆盖 ${Math.round(interview.coverage * 100)}%`
+          : "复盘待生成"
+      }`
+    : "未开始";
 
   return (
     <div className="shell" id="main">
@@ -141,18 +158,8 @@ export default function Archive({ go }: Props) {
           >
             <span className="h3">岗位</span>
             <span className="row" style={{ gap: 8 }}>
-              <i
-                className={
-                  profile.target.city || profile.target.role ? "dot" : "dot hollow"
-                }
-              />
-              <span
-                className={
-                  profile.target.city || profile.target.role ? "fs-13" : "small"
-                }
-              >
-                {jobsStatus}
-              </span>
+              <i className={jobs && jobs.length ? "dot" : "dot hollow"} />
+              <span className={jobs && jobs.length ? "fs-13" : "small"}>{jobsStatus}</span>
             </span>
             <button className="pill sm" onClick={() => go("jobs")} type="button">
               {profile.target.city || profile.target.role ? "查看" : "去搜索"}
@@ -171,8 +178,8 @@ export default function Archive({ go }: Props) {
           >
             <span className="h3">面试</span>
             <span className="row" style={{ gap: 8 }}>
-              <i className="dot hollow" />
-              <span className="small">{interviewStatus}</span>
+              <i className={interview?.sessionId ? "dot" : "dot hollow"} />
+              <span className={interview?.sessionId ? "fs-13" : "small"}>{interviewStatus}</span>
             </span>
             <button
               className="pill sm"

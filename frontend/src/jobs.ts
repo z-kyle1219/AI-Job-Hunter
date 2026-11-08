@@ -1,13 +1,16 @@
-import type { Profile } from "./types";
+import type {
+  ApiJob,
+  JobCandidate,
+  JobEmploymentType,
+  JobMatch,
+  RequirementScore,
+} from "./api";
+import type { Employment } from "./types";
 
 export type Verify = "ok" | "pending" | "dead";
 
-export type Req = {
-  label: string;
-  type: "hard" | "skill" | "evidence";
-};
-
-export type Job = {
+/** 页面用的岗位视图：只做展示映射，不再自带假数据。 */
+export type JobView = {
   id: string;
   company: string;
   title: string;
@@ -16,153 +19,143 @@ export type Job = {
   employment: string;
   education: string;
   source: string;
+  sourceUrl: string | null;
   verify: Verify;
+  status: ApiJob["verification_status"];
   collected: string;
-  reqs: Req[];
+  requirements: string[];
+  description: string;
+  employmentType: JobEmploymentType | null;
 };
 
-export const JOBS: Job[] = [
-  {
-    id: "j1",
-    company: "字节跳动",
-    title: "前端开发实习生",
-    city: "上海 徐汇",
-    salary: "200–300 / 天",
-    employment: "实习",
-    education: "本科及以上",
-    source: "实习僧",
-    verify: "ok",
-    collected: "2 天前",
-    reqs: [
-      { label: "城市 上海", type: "hard" },
-      { label: "类型 实习", type: "hard" },
-      { label: "学历 本科", type: "hard" },
-      { label: "React / TypeScript", type: "skill" },
-      { label: "组件库搭建", type: "skill" },
-      { label: "性能优化", type: "evidence" },
-      { label: "团队协作证明", type: "evidence" },
-    ],
-  },
-  {
-    id: "j2",
-    company: "小红书",
-    title: "Web 前端实习生",
-    city: "上海 黄浦",
-    salary: "180–250 / 天",
-    employment: "实习",
-    education: "本科及以上",
-    source: "企业官网",
-    verify: "ok",
-    collected: "4 小时前",
-    reqs: [
-      { label: "城市 上海", type: "hard" },
-      { label: "类型 实习", type: "hard" },
-      { label: "React", type: "skill" },
-      { label: "移动端适配", type: "evidence" },
-    ],
-  },
-  {
-    id: "j3",
-    company: "米哈游",
-    title: "前端开发（校招）",
-    city: "上海 徐汇",
-    salary: "20–30K",
-    employment: "校招",
-    education: "本科及以上",
-    source: "Offer先生",
-    verify: "dead",
-    collected: "6 天前",
-    reqs: [
-      { label: "城市 上海", type: "hard" },
-      { label: "类型 校招", type: "hard" },
-      { label: "图形学基础", type: "evidence" },
-    ],
-  },
-  {
-    id: "j4",
-    company: "哔哩哔哩",
-    title: "前端实习生",
-    city: "杭州 滨江",
-    salary: "150–220 / 天",
-    employment: "实习",
-    education: "本科及以上",
-    source: "实习僧",
-    verify: "pending",
-    collected: "1 天前",
-    reqs: [
-      { label: "城市 杭州", type: "hard" },
-      { label: "类型 实习", type: "hard" },
-      { label: "Vue / React", type: "skill" },
-      { label: "内容社区经验", type: "evidence" },
-    ],
-  },
+export const EMPLOYMENT_OPTIONS: { label: Employment; value: JobEmploymentType }[] = [
+  { label: "实习", value: "internship" },
+  { label: "兼职", value: "part_time" },
+  { label: "全职", value: "full_time" },
+  { label: "合同", value: "contract" },
 ];
 
-function hardMet(label: string, p: Profile, job: Job): boolean {
-  if (label.startsWith("城市")) {
-    return !p.target.city || job.city.includes(p.target.city);
-  }
-  if (label.startsWith("类型")) {
-    return !p.target.employment || job.employment === p.target.employment;
-  }
-  return true; // 学历默认满足
-}
-
-const NEEDS = {
-  skill: (p: Profile) => p.projects.length > 0 || !!p.resume,
-  evidence: (p: Profile) => p.stories.trim().length > 0,
+const EMPLOYMENT_LABEL: Record<JobEmploymentType, string> = {
+  internship: "实习",
+  part_time: "兼职",
+  full_time: "全职",
+  contract: "合同",
 };
 
-export type Match = {
+export function employmentLabelOf(type: JobEmploymentType | null): string {
+  return type ? EMPLOYMENT_LABEL[type] : "未标注";
+}
+
+export function verifyOf(status: ApiJob["verification_status"]): Verify {
+  if (status === "active") return "ok";
+  if (status === "expired" || status === "source_unavailable") return "dead";
+  return "pending";
+}
+
+function fmtMoney(value: number): string {
+  if (value >= 1000) {
+    const k = value / 1000;
+    return `${Number.isInteger(k) ? k : k.toFixed(1)}K`;
+  }
+  return String(value);
+}
+
+export function salaryText(job: ApiJob): string {
+  const { salary_min: min, salary_max: max, salary_period: period } = job;
+  if (min == null && max == null) return "薪资面议";
+
+  const unit = period === "day" ? " / 天" : period === "year" ? " / 年" : " / 月";
+  if (min != null && max != null && min !== max) {
+    return `${fmtMoney(min)}–${fmtMoney(max)}${unit}`;
+  }
+  const single = min ?? max ?? 0;
+  return `${fmtMoney(single)}${unit}`;
+}
+
+export function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "时间未知";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "时间未知";
+  const minutes = Math.round((Date.now() - then) / 60000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.round(hours / 24)} 天前`;
+}
+
+/** 岗位要求是一段文本：按换行/分号切成条目，一条一条对着看。 */
+export function requirementLines(text: string): string[] {
+  return text
+    .split(/[\n；;]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+export function toJobView(job: ApiJob): JobView {
+  return {
+    id: job.id,
+    company: job.company,
+    title: job.title,
+    city: job.location?.trim() || "地点未标注",
+    salary: salaryText(job),
+    employment: employmentLabelOf(job.employment_type),
+    // 后端岗位表没有学历字段，这里如实说「未标注」而不是编一个
+    education: "未标注",
+    source: job.source_name,
+    sourceUrl: job.source_url,
+    verify: verifyOf(job.verification_status),
+    status: job.verification_status,
+    collected: relativeTime(job.collected_at),
+    requirements: requirementLines(job.requirements),
+    description: job.description,
+    employmentType: job.employment_type,
+  };
+}
+
+/* ---------- 匹配结果 → 三列 ---------- */
+
+export type MatchColumns = {
   met: string[];
   gap: string[];
   fail: string[];
   score: number;
+  confidence: number;
+  source: JobMatch["score_source"];
+  mustCoverage: number;
 };
 
 /**
- * 匹配分不是后端算的，是拿档案里「有没有东西」推出来的假规则：
- * 有项目 -> 技能项满足；有经历 -> 证据项满足；城市对不上 -> 硬性不满足。
- * 接后端后换成 API 返回的 dimensions[]。
+ * 三列全部来自后端：命中 / 缺证据 / 硬性不满足。
+ * 分数是 0–1，展示时四舍五入到 0–100。
  */
-export function matchOf(job: Job, p: Profile): Match {
-  const met: string[] = [];
-  const gap: string[] = [];
-  const fail: string[] = [];
-
-  for (const r of job.reqs) {
-    if (r.type === "hard") {
-      if (hardMet(r.label, p, job)) met.push(r.label);
-      else fail.push(r.label);
-    } else if (NEEDS[r.type](p)) {
-      met.push(r.label);
-    } else {
-      gap.push(r.label);
-    }
-  }
-
-  const hard = job.reqs.filter((r) => r.type === "hard");
-  const hardMetCount = hard.filter((r) => met.includes(r.label)).length;
-  const softMet = met.length - hardMetCount;
-
-  const base =
-    40 +
-    hardMetCount * 6 +
-    softMet * 7 -
-    gap.length * 5 -
-    fail.length * 9 +
-    (hardMetCount === hard.length ? 6 : -6);
-  const score = Math.max(38, Math.min(96, base));
-
-  return { met, gap, fail, score };
+export function matchColumns(match: JobMatch): MatchColumns {
+  const fail = Array.from(new Set(match.must_gaps));
+  const gap = match.gaps.filter((item) => !fail.includes(item));
+  return {
+    met: match.match_points,
+    gap,
+    fail,
+    score: Math.round(match.score * 100),
+    confidence: match.confidence,
+    source: match.score_source,
+    mustCoverage: match.must_coverage,
+  };
 }
 
-export function sortedJobs(p: Profile): { job: Job; match: Match }[] {
-  // 失效岗位一律沉底：用户看到的第一条不该是一个已经关掉的岗位。
-  // 已核验 / 待核验视为同一档，档内按匹配分排。
-  const tier = (v: Job["verify"]) => (v === "dead" ? 1 : 0);
+export function requirementStatusLabel(status: RequirementScore["status"]): string {
+  switch (status) {
+    case "covered":
+      return "满足";
+    case "partial":
+      return "部分满足";
+    case "missing":
+      return "没证据";
+    default:
+      return "无法判断";
+  }
+}
 
-  return JOBS.map((job) => ({ job, match: matchOf(job, p) })).sort(
-    (a, b) => tier(a.job.verify) - tier(b.job.verify) || b.match.score - a.match.score
-  );
+export function candidateScore(candidate: JobCandidate | null): number | null {
+  return candidate ? Math.round(candidate.score * 100) : null;
 }

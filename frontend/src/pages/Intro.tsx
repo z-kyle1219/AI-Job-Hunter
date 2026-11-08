@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FlipWord from "../components/FlipWord";
 import AuthForm from "../components/AuthForm";
-import { useProfile } from "../store";
 import type { Route } from "../App";
 
 type Props = {
@@ -33,7 +32,6 @@ const T_MOVE = 1850;
 let introPlayed = false;
 
 export default function Intro({ go }: Props) {
-  const { setUser } = useProfile();
   const [replay] = useState(() => introPlayed);
   const [phase, setPhase] = useState<"cold" | "move" | "done">(replay ? "done" : "cold");
   const [yellow, setYellow] = useState(replay);
@@ -136,10 +134,7 @@ export default function Intro({ go }: Props) {
         <h2 className="h2 mt-8">先有账号，档案才存得住。</h2>
 
         <div className="auth-wrap mt-24">
-          <AuthForm
-            onDone={(name, account) => setUser({ name, account })}
-            onNext={() => go("upload")}
-          />
+          <AuthForm onNext={() => go("upload")} />
         </div>
       </section>
 

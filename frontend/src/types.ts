@@ -15,10 +15,13 @@ export type Project = {
   isMain: boolean;
 };
 
+/** 和后端 EmploymentType 同一套词：实习 / 兼职 / 全职 / 合同 */
+export type Employment = "实习" | "兼职" | "全职" | "合同";
+
 export type Target = {
   role?: string;
   city?: string;
-  employment?: "实习" | "校招" | "社招";
+  employment?: Employment;
 };
 
 export type Profile = {
@@ -55,8 +58,15 @@ export type InterviewAnswer = {
 
 export type InterviewResult = {
   jobId: string;
+  jobTitle?: string;
+  company?: string;
+  /** 后端面试会话 id：复盘、交付记录都靠它 */
+  sessionId?: string;
   answers: InterviewAnswer[];
   seconds: number;
+  /** 后端复盘给出的需求覆盖率，不是质量分 */
+  coverage?: number;
+  overall?: string;
 };
 
 export const EMPTY_PROFILE: Profile = {
