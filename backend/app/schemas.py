@@ -115,8 +115,25 @@ class CitedChunk(BaseModel):
     text: str
 
 
+class PendingField(BaseModel):
+    """One thing a profile is missing, and the question that would fill it.
+
+    ``ask`` is phrased for the person, not for a model: the answer is meant to
+    be typed in. Nothing in the pipeline is allowed to guess it — an invented
+    gap is indistinguishable from a real one once it is on the page.
+    """
+
+    field: str
+    label: str
+    ask: str
+    why: str = ""
+    blocking: bool = False
+
+
 class ResumeDraftResponse(BaseModel):
     profile_id: str
+    # What the profile still cannot answer. Rule-derived, never model-derived.
+    pending_fields: list[PendingField] = Field(default_factory=list)
     # Set only when the draft was stored as a version. ``version`` stays 0 and
     # ``resume_id`` stays None when nothing was written, so "no row" can never
     # be read as "version zero of something".

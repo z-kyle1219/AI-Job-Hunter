@@ -30,6 +30,8 @@ python -m venv .venv
 | `GET /api/v1/job-fit`、`GET /api/v1/job-fit/{request_id}` | 查看分析历史或单次分析。 |
 | `POST /api/v1/users`、`GET /api/v1/users/{user_id}` | 创建和查询用户；重复邮箱返回 `409`。 |
 | `POST /api/v1/profiles`、`GET /api/v1/profiles/{profile_id}` | 创建或更新用户画像（一个用户只有一份，重复提交覆盖既有画像），并支持按 id 查询。 |
+| `GET /api/v1/profiles/{id}/pending` | 待补问题清单：规则从空字段、缺时间的经历、缺量化的经历里生成，每条带一句可直接问用户的话；`blocking` 目前只有手机号。 |
+| `PUT /api/v1/profiles/{id}/personal-info` | 填姓名 / 手机号 / 邮箱 / 城市 / 链接；按字段合并，空值不覆盖已填内容。 |
 | `POST /api/v1/profiles/extract` | 提交简历纯文本，解析成 chunk 后让模型抽取画像草稿；返回证据引用、岗位方向建议、待补充问题与 degraded 标记。传 `user_id` 时把切好的 chunk 存成简历记录并返回 `resume_id`，不传则完全无状态。 |
 | `POST /api/v1/profiles/extract/file` | 上传 PDF/DOCX 简历文件（请求体为文件字节，`filename` 查询参数决定解析器，可选 `user_id` 同上），其余与 `/profiles/extract` 相同。 |
 | `POST /api/v1/profiles/extract/bundle` | 一次提交多来源：`resume_text`、`self_description`、`projects`（JSON，对象或数组）至少一项，合并后统一切块抽取；引用表头保留 `source` 标签，可选 `user_id` 同上。 |
@@ -97,6 +99,12 @@ python -m venv .venv
 两个不变量写在代码里而不是文档里：**金额只由服务端按目录计算**（`OrderCreate` 里根本没有 amount 字段且 `extra="forbid"`，客户端想定价就是 `422`）；**`paid` 只能通过支付步骤到达，而交付必须先有 `paid`**，否则“交易→交付”就是两张互不相干的表。模拟支付固定记成 `provider="simulated"`，和真渠道永远分开——以后接微信支付时，你不需要考古哪笔是真钱。
 
 交付的 `kind` 由商品决定（`grants`），不由请求决定：能自己指定 kind 的调用方，就能拿面试次数去交付简历。同时校验这份简历/面试确实属于买家，否则一个人可以拿别人的成果冲自己的次数。价格存在表里、目录首次被读时补齐但**从不覆盖**已存在的行——手改过的价格就是当前价格，重新部署不是回滚它的理由。
+
+**待补清单是规则给的，不是模型给的**：`backend/app/profile_gaps.py` 只做三类检查——字段为空、经历没有时间、经历没有数字（先剔除日期再找数字，否则每条带日期的经历都会被当成“有量化”）。每条给一句能直接问用户的话，`blocking` 目前只有手机号：简历上没有号码，发出去也联系不上。
+
+为什么不让模型生成：问它“还缺什么”，它会补一个听起来合理的证书或指标，而用户在页面上分不出哪个是真缺、哪个是编的。这也是简历那条规则的另一面——模型只能整理已有事实，缺的东西进清单让人**填**。反过来，待补清单也从不要求用户提交模型编的内容。
+
+`personal_info` 单独一块，**不塞进 `capabilities`**：否则手机号会被当成技能词参与匹配。重新确认画像时按字段合并、空值不覆盖，因为确认流程会整行重写，一个没带个人信息的请求不该把用户刚填的手机号抹掉。`/resumes/draft` 的响应里也带这份 `pending_fields`——用户看到简历的那一刻，正是提“还缺手机号”的时候。
 
 **账号：密码用标准库 scrypt，会话是一行记录。** 密码哈希用 `hashlib.scrypt`，不引第三方密码库；存下的值自带参数（`scrypt$n$r$p$salt$digest`），以后提高成本不会让旧哈希失效——旧行依然用它写入时的参数验证。
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -48,6 +48,7 @@ from .schemas import (
     JobInput,
     JobRequirement,
     JobStatus,
+    PendingField,
     ProfileInput,
     ResumeDraftContent,
     ResumeDraftResponse,
@@ -64,6 +65,7 @@ from .schemas_resources import (
     JobVerificationRejection,
     JobVerificationRequest,
     JobVerificationResponse,
+    PersonalInfo,
     ProfileCreate,
     ResumeCreate,
     UserCreate,
@@ -78,6 +80,7 @@ from .schemas_search import (
     JobSearchRequest,
     JobSearchResponse,
 )
+from .profile_gaps import pending_fields
 from .resume_draft import (
     blocks_from_profile,
     blocks_from_stored_chunks,
@@ -233,6 +236,26 @@ def _stored_requirements(requirements: UserRequirements) -> dict[str, Any]:
     return payload
 
 
+def _merge_personal(
+    existing: Mapping[str, Any] | None, incoming: PersonalInfo
+) -> dict[str, Any]:
+    """Fill in what was sent, and never blank out what is already there.
+
+    A profile is rewritten wholesale on every confirmation, so a request that
+    carries no personal info would otherwise delete the phone number the user
+    typed in one minute earlier. Empty means "not answered", not "erase".
+    """
+
+    merged = dict(existing or {})
+    for key, value in incoming.model_dump().items():
+        if isinstance(value, list):
+            if value:
+                merged[key] = value
+        elif value:
+            merged[key] = value
+    return merged
+
+
 def create_profile(session: Session, data: ProfileCreate) -> UserProfile:
     """Create the user's profile, or update the one they already have.
 
@@ -252,6 +275,7 @@ def create_profile(session: Session, data: ProfileCreate) -> UserProfile:
             user_id=data.user_id,
             requirements=_stored_requirements(data.requirements),
             capabilities=data.capabilities.model_dump(),
+            personal_info=_merge_personal({}, data.personal_info),
             missing_information=list(data.missing_information),
             evidence=list(data.evidence),
             source_resume_id=data.source_resume_id,
@@ -262,6 +286,9 @@ def create_profile(session: Session, data: ProfileCreate) -> UserProfile:
         # truth the user just reviewed, not a patch to merge into old fields.
         profile.requirements = _stored_requirements(data.requirements)
         profile.capabilities = data.capabilities.model_dump()
+        profile.personal_info = _merge_personal(
+            profile.personal_info, data.personal_info
+        )
         profile.missing_information = list(data.missing_information)
         profile.evidence = list(data.evidence)
         profile.source_resume_id = data.source_resume_id
@@ -275,6 +302,39 @@ def get_profile(session: Session, profile_id: str) -> UserProfile:
     profile = session.get(UserProfile, profile_id)
     if profile is None:
         raise NotFoundError("profile not found")
+    return profile
+
+
+def pending_for_profile(session: Session, profile_id: str) -> list[PendingField]:
+    """What this profile still cannot answer, in the order worth asking.
+
+    The checks are in ``profile_gaps``: empty fields and experience lines with
+    no date or no number. Nothing here asks a model what it would like to know,
+    because the answer to that question is invented.
+    """
+
+    profile = get_profile(session, profile_id)
+    user = get_user(session, profile.user_id)
+    return pending_fields(
+        personal_info=profile.personal_info or {},
+        capabilities=profile.capabilities or {},
+        display_name=user.display_name,
+    )
+
+
+def update_personal_info(
+    session: Session, profile_id: str, info: PersonalInfo
+) -> UserProfile:
+    """Record the answers to the pending questions, one field at a time.
+
+    Merged rather than replaced: a form that submits only the field the user
+    just fixed must not clear the four they fixed yesterday.
+    """
+
+    profile = get_profile(session, profile_id)
+    profile.personal_info = _merge_personal(profile.personal_info, info)
+    session.commit()
+    session.refresh(profile)
     return profile
 
 
@@ -411,8 +471,16 @@ def draft_resume_for_profile(
 
     result = draft_resume(blocks, client, max_chunk_tokens=max_chunk_tokens)
     content = result.content or ResumeDraftContent()
+    # The checklist travels with the draft: the moment a user sees a resume is
+    # the moment the missing phone number is worth mentioning.
+    pending = pending_fields(
+        personal_info=profile.personal_info or {},
+        capabilities=profile.capabilities or {},
+        display_name=get_user(session, profile.user_id).display_name,
+    )
     response = ResumeDraftResponse(
         profile_id=profile.id,
+        pending_fields=pending,
         headline=content.headline,
         summary=content.summary,
         experiences=content.experiences,

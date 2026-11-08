@@ -76,6 +76,9 @@ class UserProfile(Base):
     )
     requirements: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Who the person is. Separate from ``capabilities`` so a phone number is
+    # never tokenised as evidence of a skill.
+    personal_info: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     missing_information: Mapped[list[str]] = mapped_column(JSON, default=list)
     evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
     source_resume_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .schemas import (
     EmploymentType,
@@ -66,10 +66,32 @@ class CapabilityProfile(BaseModel):
     target_roles_source: TargetRoleSource = "confirmed"
 
 
+class PersonalInfo(BaseModel):
+    """Who the person is, as opposed to what they can do.
+
+    Kept out of ``capabilities`` on purpose: a phone number run through the
+    skill tokeniser would be counted as evidence of knowing a technology.
+    Every field is optional because the honest state of a fresh account is
+    "unknown", and a form that cannot express unknown gets filled with guesses.
+    """
+
+    full_name: str = ""
+    phone: str = ""
+    email: str = ""
+    city: str = ""
+    links: list[str] = Field(default_factory=list)
+
+    @field_validator("full_name", "phone", "email", "city", mode="before")
+    @classmethod
+    def _strip(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+
 class ProfileCreate(BaseModel):
     user_id: str
     requirements: UserRequirements
     capabilities: CapabilityProfile
+    personal_info: PersonalInfo = Field(default_factory=PersonalInfo)
     missing_information: list[str] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     source_resume_id: str | None = None
@@ -82,6 +104,7 @@ class ProfileRead(BaseModel):
     user_id: str
     requirements: UserRequirements
     capabilities: CapabilityProfile
+    personal_info: PersonalInfo = Field(default_factory=PersonalInfo)
     missing_information: list[str] = Field(default_factory=list)
     evidence: list[str] = Field(default_factory=list)
     source_resume_id: str | None = None
@@ -108,6 +131,7 @@ class ProfileConfirmationRequest(BaseModel):
     user_id: str
     requirements: UserRequirements
     profile: ProfileInput
+    personal_info: PersonalInfo = Field(default_factory=PersonalInfo)
     recommended_roles: list[str] = Field(default_factory=list)
     target_roles: list[str] | None = None
     missing_information: list[str] = Field(default_factory=list)

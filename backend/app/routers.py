@@ -47,6 +47,7 @@ from .schemas import (
     JobFitRequest,
     JobFitResponse,
     JobStatus,
+    PendingField,
     ResumeDraftRequest,
     ResumeDraftResponse,
     ResumeExtractionRequest,
@@ -72,6 +73,7 @@ from .schemas_resources import (
     JobMatchCreate,
     JobMatchRead,
     JobRead,
+    PersonalInfo,
     ProfileConfirmationRequest,
     ProfileCreate,
     ProfileRead,
@@ -127,10 +129,12 @@ from .services import (
     ingest_jobs,
     list_job_fit_analyses,
     list_jobs,
+    pending_for_profile,
     probe_jobs,
     read_interview,
     search_jobs,
     start_interview_session,
+    update_personal_info,
     verify_jobs,
 )
 
@@ -383,6 +387,38 @@ def read_profile(profile_id: str, session: Session = Depends(_session)) -> Profi
     return ProfileRead.model_validate(_or_404(lambda: get_profile(session, profile_id)))
 
 
+@router.get("/profiles/{profile_id}/pending", response_model=list[PendingField])
+def read_pending_fields(
+    profile_id: str, session: Session = Depends(_session)
+) -> list[PendingField]:
+    """What this profile cannot answer yet, as questions to type answers into.
+
+    Every item comes from a rule in ``profile_gaps``: an empty field, an
+    experience line with no date, a line with no number. Nothing here asks a
+    model what else would be nice to know — that answer is invented, and an
+    invented gap looks exactly like a real one once it is on the page.
+    """
+
+    return _or_404(lambda: pending_for_profile(session, profile_id))
+
+
+@router.put("/profiles/{profile_id}/personal-info", response_model=ProfileRead)
+def write_personal_info(
+    profile_id: str,
+    data: PersonalInfo,
+    session: Session = Depends(_session),
+) -> ProfileRead:
+    """Record the answers, merging rather than replacing.
+
+    A form that submits only the field the user just fixed must not clear the
+    four they fixed yesterday, so an empty value means "still unknown".
+    """
+
+    return ProfileRead.model_validate(
+        _or_404(lambda: update_personal_info(session, profile_id, data))
+    )
+
+
 @router.post(
     "/profiles/extract",
     response_model=ResumeExtractionResponse,
@@ -551,6 +587,7 @@ def confirm_extracted_profile(
     payload = ProfileCreate(
         user_id=data.user_id,
         requirements=data.requirements,
+        personal_info=data.personal_info,
         capabilities=CapabilityProfile(
             summary=data.profile.summary,
             skills=data.profile.skills,

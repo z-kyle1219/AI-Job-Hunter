@@ -31,6 +31,7 @@ _ADDED_PROFILE_COLUMNS = (
     ("missing_information", "JSON DEFAULT '[]'"),
     ("evidence", "JSON DEFAULT '[]'"),
     ("source_resume_id", "VARCHAR(36)"),
+    ("personal_info", "JSON DEFAULT '{}'"),
 )
 
 # Columns ``job_matches`` grew once a score had to explain itself.
