@@ -118,18 +118,6 @@ export default function Intro({ go }: Props) {
         </div>
       </section>
 
-      <section className="auth-sec">
-        <div className="eyebrow">登录 / 注册</div>
-        <h2 className="h2 mt-8">先有账号，档案才存得住。</h2>
-
-        <div className="auth-wrap mt-24">
-          <AuthForm
-            onDone={(name, account) => setUser({ name, account })}
-            onNext={() => go("upload")}
-          />
-        </div>
-      </section>
-
       <section className="steps">
         <div className="eyebrow">三块，一条线</div>
         <div className="grid3 mt-16">
@@ -140,6 +128,18 @@ export default function Intro({ go }: Props) {
               <p className="small mt-8">{s.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="auth-sec">
+        <div className="eyebrow">登录 / 注册</div>
+        <h2 className="h2 mt-8">先有账号，档案才存得住。</h2>
+
+        <div className="auth-wrap mt-24">
+          <AuthForm
+            onDone={(name, account) => setUser({ name, account })}
+            onNext={() => go("upload")}
+          />
         </div>
       </section>
 

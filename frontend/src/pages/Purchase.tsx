@@ -29,6 +29,12 @@ export default function Purchase({ go }: { go: (r: Route) => void }) {
           <div>
             <div className="buy-price num">19</div>
             <div className="buy-unit">元 / 一份报告</div>
+
+            {/* 二维码位：先留空，等支付接入再放码 */}
+            <div className="qr" aria-label="支付二维码，待接入">
+              <span>二维码</span>
+            </div>
+
             <button
               className="pill solid mt-24"
               type="button"

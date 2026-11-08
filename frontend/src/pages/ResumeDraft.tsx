@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import Top from "../components/Top";
 import Band from "../components/Band";
 import { useProfile } from "../store";
-import { buildQuestions } from "../questions";
 import { ApiError, confirmProfile, draftResume, type ResumeDraft as Draft } from "../api";
 import type { Route } from "../App";
 
@@ -70,26 +69,6 @@ export default function ResumeDraft({ go }: Props) {
       ? []
       : [{ key: "stories", label: "主观经历是空的，这一栏只留了小标题" }]),
   ];
-
-  // 只统计当前题目对应的答案，避免旧简历的答案混进来
-  const questionIds = new Set(buildQuestions(profile).map((q) => q.id));
-  const doneEntries = Object.entries(profile.answers).filter(([id]) => questionIds.has(id));
-  const done = doneEntries.length;
-
-  // 答案里存的是 questionId，展示时转成人能看懂的标签
-  const LABELS: Record<string, string> = {
-    stories: "经历",
-    "resume-period": "简历",
-    extra: "补充",
-  };
-  const labelOf = (id: string) => {
-    if (LABELS[id]) return LABELS[id];
-    if (id.startsWith("proj-")) {
-      const pid = id.slice(5);
-      return profile.projects.find((p) => p.id === pid)?.name ?? "项目";
-    }
-    return "档案";
-  };
 
   return (
     <div className="shell" id="main">
@@ -326,7 +305,7 @@ export default function ResumeDraft({ go }: Props) {
 
           <aside style={{ flex: "0 1 300px", minWidth: 260 }}>
             <div className="row between" style={{ gap: 12 }}>
-              <span className="eyebrow">待确认 · {pending.length}</span>
+              <span className="eyebrow">还缺 · {pending.length}</span>
             </div>
             <div className="col-list mt-8">
               <ul>
@@ -336,33 +315,26 @@ export default function ResumeDraft({ go }: Props) {
                       <span style={{ flex: 1, minWidth: 0 }}>{p.label}</span>
                       <button
                         className="pill sm"
-                        onClick={() => go("resume")}
+                        onClick={() => go("upload")}
                         type="button"
                       >
-                        去确认
+                        去补充
                       </button>
                     </li>
                   ))
                 ) : (
                   <li>
-                    <span>都确认完了。</span>
+                    <span>档案里该有的都有了。</span>
                   </li>
                 )}
               </ul>
             </div>
 
-            <div className="eyebrow mt-32">本轮已确认 · {done}</div>
-            <div className="col-list mt-8">
-              <ul>
-                {doneEntries.map(([k, v]) => (
-                  <li key={k}>
-                    <em>{labelOf(k)}</em>
-                    <span>{v}</span>
-                  </li>
-                ))}
-                {done === 0 && <li className="muted">还没有确认任何一条。</li>}
-              </ul>
-            </div>
+            {draft && (draft.unverifiedFields > 0 || draft.unverifiedBullets > 0) && (
+              <p className="small mt-16">
+                后端这次标了 {draft.unverifiedFields} 处字段、{draft.unverifiedBullets} 条要点没核实。
+              </p>
+            )}
           </aside>
         </div>
 

@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import Top from "../components/Top";
 import Band from "../components/Band";
 import { useProfile } from "../store";
-import { JOBS, matchOf } from "../jobs";
+import { JOBS, matchOf, type Job } from "../jobs";
+import { API_BASE, fitJob, type JobFit } from "../api";
 import type { Route } from "../App";
 
 type Props = {
@@ -10,11 +12,57 @@ type Props = {
 
 export default function Compare({ go }: Props) {
   const { profile, compare, toggleCompare } = useProfile();
+  const [fits, setFits] = useState<Record<string, JobFit>>({});
+  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+  const key = compare.join(",");
+
+  // 和名录页走同一个后端接口，避免两边分数不一样
+  useEffect(() => {
+    const jobs = compare
+      .map((id) => JOBS.find((j) => j.id === id))
+      .filter((j): j is Job => !!j);
+
+    if (!jobs.length) {
+      setFits({});
+      setStatus("ok");
+      return;
+    }
+
+    let cancelled = false;
+    setStatus("loading");
+    Promise.all(jobs.map((job) => fitJob(profile, job)))
+      .then((results) => {
+        if (cancelled) return;
+        const next: Record<string, JobFit> = {};
+        jobs.forEach((job, i) => {
+          next[job.id] = results[i];
+        });
+        setFits(next);
+        setStatus("ok");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, key]);
 
   const picked = compare
     .map((id) => JOBS.find((j) => j.id === id))
-    .filter((j): j is NonNullable<typeof j> => !!j)
-    .map((job) => ({ job, m: matchOf(job, profile) }))
+    .filter((j): j is Job => !!j)
+    .map((job) => {
+      const local = matchOf(job, profile);
+      const fit = fits[job.id];
+      return {
+        job,
+        m: fit
+          ? { met: fit.matchPoints, gap: fit.gaps, fail: local.fail, score: fit.score }
+          : local,
+      };
+    })
     .sort((a, b) => b.m.score - a.m.score);
 
   return (
@@ -30,6 +78,14 @@ export default function Compare({ go }: Props) {
         <p className="lead">
           {picked.length ? `并排比较 ${picked.length} 个岗位，最多 4 个。` : "还没有选岗位。"}
         </p>
+
+        {picked.length > 0 && (
+          <p className="small mt-8">
+            {status === "loading" && "正在向后端核对匹配……"}
+            {status === "ok" && `匹配分来自后端 ${API_BASE} · /api/v1/job-fit`}
+            {status === "error" && `后端未连接（${API_BASE}），当前为本地估算`}
+          </p>
+        )}
 
         {picked.length === 0 ? (
           <div className="panel mt-32">

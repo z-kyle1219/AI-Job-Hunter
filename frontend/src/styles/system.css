@@ -147,7 +147,7 @@ p {
   width: 100%;
   max-width: 1440px;
   margin: 0 auto;
-  padding: clamp(28px, 4vw, 64px) var(--pad) 96px;
+  padding: clamp(28px, 4vw, 64px) var(--pad) 128px;
 }
 
 .page.tight {
@@ -302,6 +302,7 @@ p {
 .dest-go {
   justify-self: end;
   align-self: center;
+  margin-right: 10px;
   font-family: var(--font-num);
   font-size: 30px;
   line-height: 1;
@@ -610,6 +611,12 @@ textarea:focus-visible {
 
 .panel.y {
   background: var(--yellow);
+}
+
+/* 并排面板里，按钮统一贴底，两块等高 */
+.panel-cta {
+  margin-top: auto;
+  align-self: flex-start;
 }
 
 .grid3 {
@@ -1212,6 +1219,22 @@ textarea {
   margin-top: 10px;
   font-size: 11px;
   letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.qr {
+  width: 180px;
+  height: 180px;
+  margin-top: 26px;
+  display: grid;
+  place-items: center;
+  border: 1.5px dashed var(--hair);
+}
+
+.qr span {
+  font-size: 10px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: var(--mute);
 }

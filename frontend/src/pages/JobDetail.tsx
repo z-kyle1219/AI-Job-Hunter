@@ -39,22 +39,12 @@ export default function JobDetail({ go, jobId }: Props) {
   }, [profile, job, attempt]);
 
   const local = matchOf(job, profile);
-  // 后端的 match_points 只返回前 5 个关键词，硬性条件可能被截掉；
-  // 这里把本地能确定的硬性项并回来，保证打勾和列表不矛盾。
-  const met = fit
-    ? Array.from(
-        new Set([
-          ...job.reqs
-            .filter((r) => r.type === "hard" && local.met.includes(r.label))
-            .map((r) => r.label),
-          ...fit.matchPoints,
-        ])
-      )
-    : local.met;
+  // 三列只列「岗位要求」这一套词：城市 / 类型 / 学历 / 技能…
+  // 后端返回的是自由关键词（可能是「上海」这种字段值），混进来会重复，所以分开显示。
   const m = {
-    met,
-    gap: fit?.gaps ?? local.gap,
-    fail: local.fail,
+    met: Array.from(new Set(local.met)),
+    gap: Array.from(new Set(local.gap)),
+    fail: Array.from(new Set(local.fail)),
     score: fit?.score ?? local.score,
   };
   const inCompare = compare.includes(job.id);
@@ -197,9 +187,17 @@ export default function JobDetail({ go, jobId }: Props) {
               命中 {fit.matchPoints.length} 个关键词，缺口 {fit.gaps.length} 个。
             </p>
             <p className="small mt-8">
-              {fit.gaps.length
-                ? `优先补证据：${fit.gaps.join("、")}`
-                : "岗位关键词已全覆盖，接下来核对项目深度和结果。"}
+              后端提取的关键词 · 命中：
+              {fit.matchPoints.length ? fit.matchPoints.join("、") : "无"}
+            </p>
+            <p className="small mt-4">
+              后端提取的关键词 · 缺口：
+              {fit.gaps.length ? fit.gaps.join("、") : "无"}
+            </p>
+            <p className="small mt-8">
+              {m.gap.length
+                ? `优先补证据（按岗位要求）：${m.gap.join("、")}`
+                : "岗位要求已全覆盖，接下来核对项目深度和结果。"}
             </p>
           </div>
         )}
@@ -208,11 +206,7 @@ export default function JobDetail({ go, jobId }: Props) {
           <div className="col-list">
             <h4>下一步 · 简历强调</h4>
             <p style={{ fontSize: 14 }}>
-              {fit?.matchPoints.length
-                ? fit.matchPoints.slice(0, 3).join("、")
-                : softMet.length
-                  ? softMet.slice(0, 3).join("、")
-                  : "先把项目经历和技能证据补上"}
+              {softMet.length ? softMet.slice(0, 3).join("、") : "先把项目经历和技能证据补上"}
             </p>
           </div>
           <div className="col-list">
