@@ -9,8 +9,19 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from .auth import (
+    EmailAlreadyRegisteredError,
+    InvalidCredentialsError,
+    InvalidTokenError,
+    PasswordNotSetError,
+    login as login_account,
+    register as register_account,
+    resolve_token,
+    revoke_token,
+)
 from .billing import (
     BillingError,
     DeliveryNotAllowedError,
@@ -28,6 +39,7 @@ from .db import get_session
 from .extraction_service import ResumeExtractionService
 from .job_sources import SourceConfigError, SourceUnavailableError
 from .llm import DeepSeekClient, LLMClient, LLMError
+from .models import User
 from .orchestrator import JobFitOrchestrator, JobFitRunError, JobHuntOrchestrator
 from .schemas import (
     EmploymentType,
@@ -41,6 +53,7 @@ from .schemas import (
     ResumeExtractionResponse,
     ResumeSourceBundleRequest,
 )
+from .schemas_auth import LoginRequest, RegisterRequest, TokenResponse
 from .schemas_billing import (
     DeliveryCreate,
     DeliveryRead,
@@ -214,6 +227,133 @@ def job_fit(
             status_code=500,
             content=exc.to_response().model_dump(mode="json"),
         )
+
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    session: Session = Depends(_session),
+) -> User:
+    """The account behind the bearer token, or a 401 that says what is wrong.
+
+    This is a dependency rather than a parameter each route reads by hand, so a
+    route that forgets to declare it is visible in the signature — the failure
+    mode of an optional check is a route that quietly requires nothing.
+    """
+
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="需要登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        return resolve_token(session, credentials.credentials)
+    except InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+@router.post(
+    "/auth/register",
+    response_model=TokenResponse,
+    status_code=201,
+    responses={
+        409: {"description": "an account with this email already has a password"}
+    },
+)
+def register(
+    data: RegisterRequest, session: Session = Depends(_session)
+) -> TokenResponse:
+    """Create an account with a nickname, a password and an email.
+
+    All three are required, and the nickname is not decoration: it is what a
+    resume header will print, so an account without one would produce a resume
+    nobody can be identified from.
+
+    An account created before auth existed has no password; registering with its
+    email adopts it instead of failing, which is what keeps a demo dataset
+    usable without anyone inventing a password for it.
+    """
+
+    try:
+        user, token, expires_at = register_account(
+            session,
+            email=data.email,
+            password=data.password,
+            display_name=data.display_name,
+        )
+    except EmailAlreadyRegisteredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return TokenResponse(
+        access_token=token,
+        expires_at=expires_at,
+        user=UserRead.model_validate(user),
+    )
+
+
+@router.post(
+    "/auth/login",
+    response_model=TokenResponse,
+    responses={
+        401: {"description": "email and password do not match"},
+        409: {"description": "the account predates passwords; register to set one"},
+    },
+)
+def login(data: LoginRequest, session: Session = Depends(_session)) -> TokenResponse:
+    """Exchange a password for a token.
+
+    A wrong password and an unknown email answer the same way, so the login form
+    cannot be used to ask "does this person have an account here".
+    """
+
+    try:
+        user, token, expires_at = login_account(
+            session, email=data.email, password=data.password
+        )
+    except InvalidCredentialsError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    except PasswordNotSetError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return TokenResponse(
+        access_token=token,
+        expires_at=expires_at,
+        user=UserRead.model_validate(user),
+    )
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    session: Session = Depends(_session),
+) -> Response:
+    """Revoke the presented token. Logging out twice is not an error.
+
+    Without a server-side row this would be impossible: a signed token stays
+    valid until it expires, so a "log out" button would only clear the browser.
+    """
+
+    if credentials is not None and credentials.credentials:
+        revoke_token(session, credentials.credentials)
+    return Response(status_code=204)
+
+
+@router.get("/auth/me", response_model=UserRead)
+def read_me(user: User = Depends(current_user)) -> UserRead:
+    """Who this token belongs to. The client's first call after a refresh."""
+
+    return UserRead.model_validate(user)
 
 
 @router.post("/users", response_model=UserRead, status_code=201)

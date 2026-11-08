@@ -50,6 +50,10 @@ _ADDED_MATCH_COLUMNS = (
 # Columns ``interview_sessions`` grew once a finished run could be reviewed.
 _ADDED_INTERVIEW_COLUMNS = (("evaluation", "JSON DEFAULT '{}'"),)
 
+# Columns ``users`` grew once an account had to prove itself. Nullable on
+# purpose: rows created before auth keep NULL and are adopted on first register.
+_ADDED_USER_COLUMNS = (("password_hash", "VARCHAR(255)"),)
+
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_job_hunter.db")
 engine_kwargs: dict[str, object] = {"future": True}
@@ -185,6 +189,23 @@ def _migrate_interview_sessions(inspector: Any) -> None:
             )
 
 
+def _migrate_users(inspector: Any) -> None:
+    """Add the password column to accounts created before it existed.
+
+    Existing rows keep NULL rather than being given a placeholder hash: a
+    placeholder would be a password everybody knows.
+    """
+
+    columns = _columns(inspector, "users")
+    for name, definition in _ADDED_USER_COLUMNS:
+        if name in columns:
+            continue
+        with engine.begin() as connection:
+            connection.execute(
+                text(f"ALTER TABLE users ADD COLUMN {name} {definition}")
+            )
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     inspector = inspect(engine)
@@ -193,6 +214,8 @@ def init_db() -> None:
         _migrate_jobs(inspector)
     if "user_profiles" in tables:
         _migrate_user_profiles(inspector)
+    if "users" in tables:
+        _migrate_users(inspector)
     if "job_matches" in tables:
         _migrate_job_matches(inspector)
     if "interview_sessions" in tables:

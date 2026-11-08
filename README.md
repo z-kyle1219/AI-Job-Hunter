@@ -55,6 +55,10 @@ python -m venv .venv
 | `POST /api/v1/orders/{id}/payment` | 模拟支付：`provider` 只能是 `simulated`，重复调用不改 `paid_at`。 |
 | `POST /api/v1/orders/{id}/deliveries` | 记录交付物（简历 id 或面试 session id）：必须已支付、必须属于该买家、必须有剩余次数。 |
 | `GET /api/v1/users/{id}/orders` | 交易流水 + 剩余次数（`resume` / `interview`）。 |
+| `POST /api/v1/auth/register` | 注册：昵称、密码（≥8）、邮箱三项必填。返回 Bearer token。同邮箱的旧账号（无密码）会被**认领**而不是报错。 |
+| `POST /api/v1/auth/login` | 登录：密码错和不存在的邮箱给同一句 401；无密码的旧账号返回 409 并提示去注册设密码。 |
+| `POST /api/v1/auth/logout` | 撤销当前 token，`204`；重复调用也算成功。 |
+| `GET /api/v1/auth/me` | 当前登录用户；token 缺失 / 过期 / 已撤销都是 401。 |
 
 资源接口对不存在的 ID 返回 `404`；岗位不满足硬约束时，`POST /api/v1/job-matches` 返回 `422`，其中包含 `rejections` 和 `unknowns`。上传抽取接口对不支持的文件类型返回 `415`、空文件返回 `400`、超过 20MB 返回 `413`、模型未配置返回 `503`。
 
@@ -93,6 +97,14 @@ python -m venv .venv
 两个不变量写在代码里而不是文档里：**金额只由服务端按目录计算**（`OrderCreate` 里根本没有 amount 字段且 `extra="forbid"`，客户端想定价就是 `422`）；**`paid` 只能通过支付步骤到达，而交付必须先有 `paid`**，否则“交易→交付”就是两张互不相干的表。模拟支付固定记成 `provider="simulated"`，和真渠道永远分开——以后接微信支付时，你不需要考古哪笔是真钱。
 
 交付的 `kind` 由商品决定（`grants`），不由请求决定：能自己指定 kind 的调用方，就能拿面试次数去交付简历。同时校验这份简历/面试确实属于买家，否则一个人可以拿别人的成果冲自己的次数。价格存在表里、目录首次被读时补齐但**从不覆盖**已存在的行——手改过的价格就是当前价格，重新部署不是回滚它的理由。
+
+**账号：密码用标准库 scrypt，会话是一行记录。** 密码哈希用 `hashlib.scrypt`，不引第三方密码库；存下的值自带参数（`scrypt$n$r$p$salt$digest`），以后提高成本不会让旧哈希失效——旧行依然用它写入时的参数验证。
+
+会话是 `auth_sessions` 里的一行：token 是随机串，**库里只存它的 SHA-256**。没有用自签 JWT，是因为签名没法撤销——要让人登出，只能换密钥把所有人一起登出。存成行之后，退出登录是一次写入；数据库泄了也拿不到能用的 token。
+
+两个容易写错的细节：错的密码和不存在的邮箱返回**同一句** 401，否则登录框就成了“这个人在不在这”的查询接口；`password_hash` 为 NULL 的账号一律拒绝登录，绝不当作“不需要密码”——旧账号的出路是拿同一邮箱注册一次完成认领，而不是给人编一个密码。
+
+现阶段**只有 `/auth/*` 走鉴权**，其余接口仍然接受 `user_id` 入参（legacy）。分批接管：profiles → resumes → interviews → orders，改完一批就在 OpenAPI 里隐藏旧的匿名入口。`Depends(current_user)` 已经备好，新写的接口直接用。
 
 **岗位需求只读一次**：`backend/app/jd_extract.py` 用一次模型调用把岗位描述读成需求项（`kind`、`dimension`、`terms`），结果按 `sha256(NFKC 后的要求 + 描述) + extractor_version` 缓存在 `job_requirement_sets`，同一岗位重复匹配不再调用模型；改了 prompt 就升版本号，旧缓存自然失效，而不是悄悄把两种需求混在一起。模型只被要求给出结构，从不被要求打分：权重来自 `scoring.DEFAULT_CONFIG`，所以同一对(画像, 岗位)算两次得到同一个数，即使模型把需求措辞得不一样。
 
