@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { ApiError, API_BASE, loginAccount, registerAccount } from "../api";
+import { emailLooksValid } from "../email";
 import { useProfile } from "../store";
 
 type Props = {
@@ -30,9 +31,10 @@ export default function AuthForm({ onNext, nextLabel = "去填档案 →" }: Pro
     null
   );
 
+  const emailReady = emailLooksValid(email);
   const passwordReady = password.length >= 8;
   const ready =
-    !!email.trim() &&
+    emailReady &&
     passwordReady &&
     (tab === "login" || !!name.trim()) &&
     !busy;
@@ -147,6 +149,10 @@ export default function AuthForm({ onNext, nextLabel = "去填档案 →" }: Pro
           />
         </label>
       </div>
+
+      {email.trim().length > 0 && !emailReady && (
+        <p className="small mt-8">邮箱格式不正确，需要像 you@example.com 这样的地址。</p>
+      )}
 
       {password.length > 0 && !passwordReady && (
         <p className="small mt-8">密码至少 8 位。</p>

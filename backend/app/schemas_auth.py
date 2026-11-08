@@ -11,24 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .auth import clean_email
 from .schemas_resources import UserRead
-
-
-def _clean_email(value: str) -> str:
-    """Lowercase and trim, so a login cannot miss on capitalisation.
-
-    Kept deliberately shallow: the only thing a demo needs from an address is
-    that it round-trips. A stricter grammar would reject valid addresses to
-    catch typos that the confirmation mail is supposed to catch anyway.
-    """
-
-    email = value.strip().lower()
-    if "@" not in email or email.startswith("@") or email.endswith("@"):
-        raise ValueError("邮箱格式不正确")
-    local, _, domain = email.partition("@")
-    if "." not in domain or not local:
-        raise ValueError("邮箱格式不正确")
-    return email
 
 
 class RegisterRequest(BaseModel):
@@ -42,7 +26,7 @@ class RegisterRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def _email(cls, value: str) -> str:
-        return _clean_email(value)
+        return clean_email(value)
 
     @field_validator("display_name")
     @classmethod
@@ -62,7 +46,7 @@ class LoginRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def _email(cls, value: str) -> str:
-        return _clean_email(value)
+        return clean_email(value)
 
 
 class TokenResponse(BaseModel):

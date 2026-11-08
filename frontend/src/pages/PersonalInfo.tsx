@@ -9,6 +9,7 @@ import {
   savePersonalInfo,
   type PendingField,
 } from "../api";
+import { emailLooksValid } from "../email";
 import { ensureBackendProfile } from "../profileSync";
 import type { Route } from "../App";
 
@@ -88,6 +89,11 @@ export default function PersonalInfo({ go }: Props) {
   async function save() {
     const profileId = profile.backendProfileId;
     if (!profileId || saving) return;
+    if (form.email.trim() && !emailLooksValid(form.email)) {
+      setNotice(null);
+      setError("邮箱格式不正确，需要像 you@example.com 这样的地址。");
+      return;
+    }
 
     setSaving(true);
     setNotice(null);

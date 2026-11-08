@@ -15,6 +15,7 @@ from backend.app.schemas_resources import (
     JobFitRequestRead,
     JobMatchCreate,
     JobMatchRead,
+    PersonalInfo,
     ProfileCreate,
     ResumeCreate,
     UserCreate,
@@ -169,6 +170,28 @@ class ResourceModelsTest(unittest.TestCase):
         create_user(
             self.session,
             UserCreate(email="another@example.com", display_name="Another"),
+        )
+
+    def test_user_email_must_look_like_an_address(self) -> None:
+        for bad in ("test", "123", "abc@", "a@.com"):
+            with self.assertRaises(ValidationError, msg=bad):
+                UserCreate(email=bad, display_name="Student")
+
+        user = create_user(
+            self.session,
+            UserCreate(email=" Student@Example.com ", display_name="Student"),
+        )
+        self.assertEqual(user.email, "student@example.com")
+        # Reads echo what is stored instead of re-checking the grammar.
+        self.assertEqual(UserRead.model_validate(user).email, "student@example.com")
+
+    def test_contact_email_is_checked_once_answered(self) -> None:
+        self.assertEqual(PersonalInfo().email, "")
+        self.assertEqual(PersonalInfo(email="   ").email, "")
+        with self.assertRaises(ValidationError):
+            PersonalInfo(email="123456")
+        self.assertEqual(
+            PersonalInfo(email=" Liu@Example.com ").email, "liu@example.com"
         )
 
     def test_job_match_does_not_accept_client_generated_results(self) -> None:

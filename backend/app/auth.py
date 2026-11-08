@@ -120,6 +120,51 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+# RFC 5322 atext plus the dot, the punctuation a local part may contain.
+_LOCAL_PUNCTUATION = frozenset("!#$%&'*+-/=?^_`{|}~.")
+
+
+def clean_email(value: str) -> str:
+    """Validate the address shape and normalise it, or reject it.
+
+    This app sends no mail — there is no mail transport anywhere in it — so
+    nothing downstream ever confirms that an address exists. The grammar below
+    is therefore the only thing between a mistyped address and an account
+    nobody can ever reach: it is strict where typos live (``a@.com``,
+    ``test@.``, ``a@@b.com``, stray spaces) and tolerant where real addresses
+    live (unicode local parts and domains, plus-addressing, dotted locals).
+
+    Deliberately a pragmatic subset of RFC 5322, not the whole thing: quoted
+    local parts and IP-literal domains are refused rather than half-checked.
+    """
+
+    email = normalize_email(value)
+    local, at, domain = email.partition("@")
+    if len(email) > 254 or not at or "@" in domain or not local or len(local) > 64:
+        raise ValueError("邮箱格式不正确")
+    if local.startswith(".") or local.endswith(".") or ".." in local:
+        raise ValueError("邮箱格式不正确")
+    if any(not (ch.isalnum() or ch in _LOCAL_PUNCTUATION) for ch in local):
+        raise ValueError("邮箱格式不正确")
+
+    labels = domain.split(".")
+    if len(labels) < 2:
+        raise ValueError("邮箱格式不正确")
+    for label in labels:
+        if not label or len(label) > 63:
+            raise ValueError("邮箱格式不正确")
+        if label.startswith("-") or label.endswith("-"):
+            raise ValueError("邮箱格式不正确")
+        if any(not (ch.isalnum() or ch == "-") for ch in label):
+            raise ValueError("邮箱格式不正确")
+    # The TLD is the part a typo is most likely to damage, so it must read as
+    # a word: "a@b.c" and "a@b.c0m" are not addresses anyone can receive at.
+    tld = labels[-1]
+    if len(tld) < 2 or not all(ch.isalpha() for ch in tld):
+        raise ValueError("邮箱格式不正确")
+    return email
+
+
 def _issue_token(session: Session, user_id: str) -> tuple[str, datetime]:
     token = secrets.token_urlsafe(TOKEN_BYTES)
     expires_at = utc_now() + _ttl()

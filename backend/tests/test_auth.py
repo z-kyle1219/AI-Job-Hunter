@@ -19,7 +19,7 @@ from backend.app.auth import (
     verify_password,
 )
 from backend.app.models import AuthSession, Base, User, utc_now
-from backend.app.schemas_auth import RegisterRequest
+from backend.app.schemas_auth import LoginRequest, RegisterRequest
 from backend.app.schemas_resources import UserCreate
 from backend.app.services import create_user
 
@@ -148,6 +148,43 @@ class AuthTest(unittest.TestCase):
             RegisterRequest(email="a@b.com", password=PASSWORD, display_name="   ")
         with self.assertRaises(ValidationError):
             RegisterRequest(email="not-an-email", password=PASSWORD, display_name="x")
+
+    def test_an_email_has_to_look_like_an_address(self) -> None:
+        # Nothing in this app ever sends mail, so the grammar is the only
+        # thing standing between a typo and an account nobody can reach.
+        typos = (
+            "test",
+            "123456",
+            "abc@",
+            "@.com",
+            "a@.com",
+            "test@.",
+            "a@b.",
+            "a@b..",
+            "a@@b.com",
+            "a b@c.com",
+            "a@b.c",
+            "a@b..com",
+            "a@-b.com",
+            "a@b-.com",
+            ".a@b.com",
+            "a.@b.com",
+            "a..b@c.com",
+            "a@b.com/x",
+        )
+        for bad in typos:
+            with self.assertRaises(ValidationError, msg=bad):
+                RegisterRequest(email=bad, password=PASSWORD, display_name="x")
+            with self.assertRaises(ValidationError, msg=bad):
+                LoginRequest(email=bad, password=PASSWORD)
+
+        for good in (
+            "buyer@example.com",
+            "first.last+tag@sub.example.org",
+            "张三@例子.公司",
+        ):
+            request = RegisterRequest(email=good, password=PASSWORD, display_name="x")
+            self.assertEqual(request.email, good.strip().lower())
 
 
 if __name__ == "__main__":

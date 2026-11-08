@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .auth import clean_email
 from .schemas import (
     EmploymentType,
     JobFitRequest,
@@ -25,11 +26,23 @@ class UserCreate(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     display_name: str = Field(min_length=1, max_length=255)
 
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        # An account row is reachable only through its email; a row created
+        # with "test" can never receive anything, not even a login reset.
+        return clean_email(value)
 
-class UserRead(UserCreate):
+
+class UserRead(BaseModel):
+    # Deliberately not ``UserCreate``: reads must echo what is stored, not
+    # re-check it, or one legacy row with an odd address would 500 every
+    # endpoint that shows it instead of staying visible and adoptable.
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    email: str
+    display_name: str
     created_at: datetime
     updated_at: datetime
 
@@ -85,6 +98,13 @@ class PersonalInfo(BaseModel):
     @classmethod
     def _strip(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: str) -> str:
+        # Empty means "not answered" and stays; once answered, the contact
+        # address has to survive being written on a resume and replied to.
+        return clean_email(value) if value else value
 
 
 class ProfileCreate(BaseModel):
