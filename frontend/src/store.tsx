@@ -123,7 +123,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     readAccount()
       .then((account) => {
         if (cancelled) return;
-        setUser((prev) => ({
+        setUser(() => ({
           name: account.display_name,
           account: account.email,
           id: account.id,
