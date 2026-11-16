@@ -31,7 +31,7 @@ web
 
 - 前端 React 18 + TypeScript + Vite，12 条 hash 路由：intro / home / upload / resume / resume-qa / resume-draft / jobs / job / interview / report / compare / archive。
 - 演示态存 `localStorage`，key `jobhunter.state.v1`；刷新不丢，清空靠删 key。
-- 后端 FastAPI：`POST /api/v1/profiles/extract/file`、`/api/v1/job-fit` 等；未连后端时前端回退本地估算并在页面上方显示提示条，这个降级路径是功能的一部分。
+- 后端 FastAPI：`POST /api/v1/profiles/extract/file`、`/api/v1/job-search`、`/api/v1/job-matches` 等；后端不可用时页面显示错误，不再回退本地估算。
 - 未配置 `DEEPSEEK_API_KEY` 时上传解析返回 503，页面必须提示并保留已选文件信息。
 - 岗位库是本地 JSON（北京技术岗），核验状态、来源、采集日期是展示的一部分。
 - 前端部署 GitHub Pages，生产资源前缀 `/jobhunter/`；本地 dev 从 `/` 起。

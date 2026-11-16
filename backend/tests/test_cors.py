@@ -55,7 +55,7 @@ class CorsTest(unittest.IsolatedAsyncioTestCase):
     async def test_post_preflight_includes_content_type(self) -> None:
         response = await _request(
             "OPTIONS",
-            "/api/v1/job-fit",
+            "/api/v1/job-search",
             [
                 (b"origin", b"http://127.0.0.1:3000"),
                 (b"access-control-request-method", b"POST"),

@@ -31,7 +31,6 @@ from .llm import LLMClient
 from .models import (
     InterviewSession,
     Job,
-    JobFitAnalysis,
     JobMatch,
     Resume,
     User,
@@ -43,8 +42,6 @@ from .schemas import (
     CitedChunk,
     EmploymentType,
     FitReport,
-    JobFitRequest,
-    JobFitResponse,
     JobInput,
     JobRequirement,
     JobStatus,
@@ -1196,31 +1193,3 @@ def evaluate_interview(
     session.refresh(record)
     return evaluation
 
-
-def create_job_fit_analysis(
-    session: Session,
-    request: JobFitRequest,
-    result: JobFitResponse,
-) -> JobFitAnalysis:
-    analysis = JobFitAnalysis(
-        request_id=result.request_id,
-        request=request.model_dump(mode="json"),
-        result=result.model_dump(mode="json"),
-    )
-    session.add(analysis)
-    session.commit()
-    session.refresh(analysis)
-    return analysis
-
-
-def get_job_fit_analysis(session: Session, request_id: str) -> JobFitAnalysis:
-    analysis = session.get(JobFitAnalysis, request_id)
-    if analysis is None:
-        raise NotFoundError("job fit analysis not found")
-    return analysis
-
-
-def list_job_fit_analyses(session: Session) -> list[JobFitAnalysis]:
-    return list(
-        session.query(JobFitAnalysis).order_by(JobFitAnalysis.created_at.desc()).all()
-    )

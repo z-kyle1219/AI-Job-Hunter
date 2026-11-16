@@ -12,7 +12,6 @@ from backend.app.routers import add_user, read_jobs
 from backend.app.schemas_resources import (
     CapabilityProfile,
     JobCreate,
-    JobFitRequestRead,
     JobMatchCreate,
     JobMatchRead,
     PersonalInfo,
@@ -142,21 +141,6 @@ class ResourceModelsTest(unittest.TestCase):
             ],
             [internship.id],
         )
-
-    def test_job_fit_history_accepts_legacy_job_without_employment_type(self) -> None:
-        request = JobFitRequestRead.model_validate(
-            {
-                "profile": {"summary": "Python student"},
-                "job": {
-                    "title": "AI Intern",
-                    "company": "Example",
-                    "description": "AI workflows",
-                    "requirements": "Python",
-                },
-            }
-        )
-
-        self.assertIsNone(request.job.employment_type)
 
     def test_duplicate_email_returns_conflict_and_keeps_session_usable(self) -> None:
         data = UserCreate(email="duplicate@example.com", display_name="Student")

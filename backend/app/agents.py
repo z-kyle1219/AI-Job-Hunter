@@ -2,14 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .schemas import (
-    FitReport,
-    InterviewQuestion,
-    JobInput,
-    JobRequirementSet,
-    JobVerification,
-    ProfileInput,
-)
+from .schemas import FitReport, JobInput, JobRequirementSet, ProfileInput
 
 
 _CJK_RUN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]+")
@@ -140,24 +133,6 @@ def readable_terms(
     return _display_terms(value, terms, limit)
 
 
-class JobVerifierAgent:
-    name = "job_verifier"
-
-    def run(self, job: JobInput) -> JobVerification:
-        checks = {
-            "has_title": bool(job.title.strip()),
-            "has_company": bool(job.company.strip()),
-            "has_requirements": bool(job.requirements.strip()),
-            "has_source_url": bool(job.source_url and job.source_url.strip()),
-        }
-        return JobVerification(
-            status="pending_verification" if checks["has_source_url"] else "unknown",
-            checks=checks,
-            source_name=job.source_name,
-            source_url=job.source_url,
-        )
-
-
 class CareerAnalystAgent:
     """Score a posting against a profile, and say why.
 
@@ -179,32 +154,3 @@ class CareerAnalystAgent:
 
         return score_fit(profile, job, requirements)
 
-
-class ContentAgent:
-    name = "content_agent"
-
-    def run(self, job: JobInput, report: FitReport) -> tuple[list[str], list[InterviewQuestion]]:
-        resume_suggestions = [
-            f"Add one result-focused bullet directly tied to the requirements for {job.title}.",
-            "Add the action, technical stack, measurable result, and your contribution to each experience.",
-        ]
-        resume_suggestions.extend(f"Prepare evidence for this gap: {gap}" for gap in report.gaps[:2])
-
-        questions = [
-            InterviewQuestion(
-                type="project",
-                question="Introduce one project you led or contributed to deeply, and explain your specific contribution.",
-                why="Checks experience authenticity, ownership, and measurable results.",
-            ),
-            InterviewQuestion(
-                type="technical",
-                question=f"How would you design a verifiable solution for a core requirement of {job.title}?",
-                why="Checks whether technical understanding maps to the actual role.",
-            ),
-            InterviewQuestion(
-                type="behavior",
-                question="When a project has schedule risk or missing information, how do you decide and recover?",
-                why="Maps to the challenge requirement for exception handling and human decisions.",
-            ),
-        ]
-        return resume_suggestions, questions

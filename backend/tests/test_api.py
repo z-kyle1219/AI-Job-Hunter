@@ -155,49 +155,6 @@ class ApiContractTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile_response.status, 201)
         return profile_response.json()["id"]
 
-    async def test_job_fit_is_persisted_and_readable_through_http(self) -> None:
-        request_payload = {
-            "profile": {"summary": "Python student", "skills": ["Python"]},
-            "job": _job_payload(),
-        }
-        create_response = await _request("POST", "/api/v1/job-fit", request_payload)
-
-        self.assertEqual(create_response.status, 200)
-        created = create_response.json()
-        self.assertTrue(created["request_id"])
-
-        history_response = await _request("GET", "/api/v1/job-fit")
-        detail_response = await _request(
-            "GET",
-            f"/api/v1/job-fit/{created['request_id']}",
-        )
-
-        self.assertEqual(history_response.status, 200)
-        self.assertEqual(detail_response.status, 200)
-        history = history_response.json()
-        detail = detail_response.json()
-        self.assertEqual([item["request_id"] for item in history], [created["request_id"]])
-        self.assertEqual(
-            detail["request"],
-            {
-                "profile": {
-                    "summary": "Python student",
-                    "skills": ["Python"],
-                    "experiences": [],
-                },
-                "job": {
-                    "title": "AI Intern",
-                    "company": "Example",
-                    "description": "AI workflows",
-                    "requirements": "Python",
-                    "employment_type": "internship",
-                    "source_name": "manual",
-                    "source_url": None,
-                },
-            },
-        )
-        self.assertEqual(detail["result"], created)
-
     async def test_job_match_computes_and_persists_server_results(self) -> None:
         profile_id = await self._create_profile()
         job_response = await _request("POST", "/api/v1/jobs", _job_payload())

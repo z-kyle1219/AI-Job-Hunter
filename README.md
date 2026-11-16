@@ -71,7 +71,7 @@ python -m venv .venv
 | 简历 | `POST /api/v1/resumes/draft` | 基础简历草稿：要点带 `sources` 引用，按画像版本化落库 |
 | 岗位 | `POST /api/v1/jobs`、`/jobs/ingest`、`/jobs/collect` | 手动录入 / 采集入库（幂等去重合并） |
 | 核验 | `POST /api/v1/jobs/verify`、`/jobs/probe`、`/jobs/expire-stale` | 人工核验、来源探活、长期无证据自动过期 |
-| 搜索匹配 | `POST /api/v1/job-search`、`/job-hunt`、`/job-matches`、`/job-fit` | 召回排序 → 逐需求加权匹配（`breakdown`）→ 一键跑完全流程 |
+| 搜索匹配 | `POST /api/v1/job-search`、`/job-hunt`、`/job-matches` | 召回排序 → 逐需求加权匹配（`breakdown`）→ 一键跑完全流程 |
 | 面试 | `POST /api/v1/interviews`、`/{id}/answers`、`/{id}/evaluation` | 模拟面试；结束后逐需求复盘 `answered` / `surface` / `unanswered` |
 | 交易 | `GET /api/v1/products`、`POST /api/v1/orders`、`/{id}/payment`、`/{id}/deliveries` | 目录定价 → 下单 → 模拟支付 → 交付；金额只由服务端计算 |
 | 账号 | `POST /api/v1/auth/register` / `login` / `logout`、`GET /api/v1/auth/me` | scrypt 密码 + 可撤销会话 token |

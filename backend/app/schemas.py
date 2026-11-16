@@ -210,18 +210,6 @@ class JobInput(BaseModel):
     source_url: str | None = None
 
 
-class JobFitRequest(BaseModel):
-    profile: ProfileInput
-    job: JobInput
-
-
-class JobVerification(BaseModel):
-    status: JobStatus
-    checks: dict[str, bool]
-    source_name: str
-    source_url: str | None
-
-
 RequirementKind = Literal["must", "should", "nice"]
 RequirementDimension = Literal[
     "skill", "experience", "domain", "education", "language", "other"
@@ -321,33 +309,9 @@ class FitReport(MatchResult):
     score_source: Literal["extracted", "heuristic"] = "heuristic"
 
 
-class InterviewQuestion(BaseModel):
-    type: str
-    question: str
-    why: str
-
-
 class RunEvent(BaseModel):
     stage: str
     status: str
     duration_ms: int
     detail: str
 
-
-class JobFitResponse(BaseModel):
-    request_id: str
-    job: JobVerification
-    fit_report: FitReport
-    resume_suggestions: list[str]
-    interview_questions: list[InterviewQuestion]
-    warnings: list[str]
-    run_log: list[RunEvent]
-
-
-class JobFitFailureResponse(BaseModel):
-    request_id: str
-    status: Literal["failed"]
-    failed_stage: str
-    error_type: str
-    message: str
-    run_log: list[RunEvent]

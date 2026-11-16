@@ -8,8 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .auth import clean_email
 from .schemas import (
     EmploymentType,
-    JobFitRequest,
-    JobFitResponse,
     JobInput,
     JobStatus,
     MatchResult,
@@ -280,14 +278,6 @@ class JobExpiryResponse(BaseModel):
     max_age_days: int
 
 
-class JobInputRead(JobInput):
-    employment_type: EmploymentType | None = None
-
-
-class JobFitRequestRead(JobFitRequest):
-    job: JobInputRead
-
-
 class JobMatchCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -313,11 +303,3 @@ class JobMatchRead(JobMatchCreate, MatchResult):
     score_source: Literal["extracted", "heuristic"] = "heuristic"
     created_at: datetime
 
-
-class JobFitAnalysisRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    request_id: str
-    request: JobFitRequestRead
-    result: JobFitResponse
-    created_at: datetime

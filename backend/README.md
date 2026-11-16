@@ -35,8 +35,6 @@ python -m venv .venv
 | 方法与路径 | 说明 |
 | --- | --- |
 | `GET /health` | 健康检查。 |
-| `POST /api/v1/job-fit` | 执行完整的岗位适配分析，并持久化成功结果；失败时返回带 `run_log` 的结构化错误。 |
-| `GET /api/v1/job-fit`、`GET /api/v1/job-fit/{request_id}` | 查看分析历史或单次分析。 |
 | `POST /api/v1/users`、`GET /api/v1/users/{user_id}` | 创建和查询用户；重复邮箱返回 `409`。 |
 | `POST /api/v1/profiles`、`GET /api/v1/profiles/{profile_id}` | 创建或更新用户画像（一个用户只有一份，重复提交覆盖既有画像），并支持按 id 查询。 |
 | `POST /api/v1/profiles/extract` | 提交简历纯文本，解析成 chunk 后让模型抽取画像草稿；返回证据引用、岗位方向建议、待补充问题与 degraded 标记。传 `user_id` 时把切好的 chunk 存成简历记录并返回 `resume_id`，不传则完全无状态。 |

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from io import BytesIO
-import logging
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -40,12 +38,9 @@ from .extraction_service import ResumeExtractionService
 from .job_sources import SourceConfigError, SourceUnavailableError
 from .llm import DeepSeekClient, LLMClient, LLMError
 from .models import User
-from .orchestrator import JobFitOrchestrator, JobFitRunError, JobHuntOrchestrator
+from .orchestrator import JobHuntOrchestrator
 from .schemas import (
     EmploymentType,
-    JobFitFailureResponse,
-    JobFitRequest,
-    JobFitResponse,
     JobStatus,
     PendingField,
     ResumeDraftRequest,
@@ -69,7 +64,6 @@ from .schemas_hunt import JobHuntRequest, JobHuntResponse
 from .schemas_resources import (
     CapabilityProfile,
     JobCreate,
-    JobFitAnalysisRead,
     JobMatchCreate,
     JobMatchRead,
     JobRead,
@@ -112,7 +106,6 @@ from .services import (
     answer_interview,
     collect_jobs,
     create_job,
-    create_job_fit_analysis,
     create_job_match,
     create_profile,
     create_resume,
@@ -121,13 +114,11 @@ from .services import (
     evaluate_interview,
     expire_stale_jobs,
     get_job,
-    get_job_fit_analysis,
     get_job_match,
     get_profile,
     get_resume,
     get_user,
     ingest_jobs,
-    list_job_fit_analyses,
     list_jobs,
     pending_for_profile,
     probe_jobs,
@@ -139,11 +130,8 @@ from .services import (
 )
 
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter()
 health_router = APIRouter(tags=["Health"])
-orchestrator = JobFitOrchestrator()
 _llm_client: LLMClient | None = None
 
 
@@ -205,32 +193,6 @@ def _or_404(operation: Callable[[], Any]) -> Any:
 @health_router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "ai-job-hunter"}
-
-
-@router.post(
-    "/job-fit",
-    response_model=JobFitResponse,
-    responses={500: {"model": JobFitFailureResponse}},
-)
-def job_fit(
-    request: JobFitRequest,
-    session: Session = Depends(get_session),
-) -> JobFitResponse | JSONResponse:
-    try:
-        response = orchestrator.run(request)
-        create_job_fit_analysis(session, request, response)
-        return response
-    except JobFitRunError as exc:
-        logger.exception(
-            "job-fit request %s failed at stage %s; run_log=%s",
-            exc.request_id,
-            exc.failed_stage,
-            [event.model_dump() for event in exc.run_log],
-        )
-        return JSONResponse(
-            status_code=500,
-            content=exc.to_response().model_dump(mode="json"),
-        )
 
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -1101,22 +1063,3 @@ def read_order_history(
         interview=line("interview"),
     )
 
-
-@router.get("/job-fit", response_model=list[JobFitAnalysisRead])
-def read_job_fit_analyses(
-    session: Session = Depends(_session),
-) -> list[JobFitAnalysisRead]:
-    return [
-        JobFitAnalysisRead.model_validate(analysis)
-        for analysis in list_job_fit_analyses(session)
-    ]
-
-
-@router.get("/job-fit/{request_id}", response_model=JobFitAnalysisRead)
-def read_job_fit_analysis(
-    request_id: str,
-    session: Session = Depends(_session),
-) -> JobFitAnalysisRead:
-    return JobFitAnalysisRead.model_validate(
-        _or_404(lambda: get_job_fit_analysis(session, request_id))
-    )
