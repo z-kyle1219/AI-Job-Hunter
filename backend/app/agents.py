@@ -79,32 +79,78 @@ def _terms(value: str) -> set[str]:
     return ascii_terms | _cjk_terms(value)
 
 
-def _matched_spans(value: str, terms: set[str]) -> list[str]:
-    """Merge matched bigrams back into readable spans, in order of appearance."""
+def _bigram_positions(segment: str, terms: set[str]) -> set[int]:
+    """Character positions in ``segment`` that any of ``terms`` covers."""
+
+    positions: set[int] = set()
+    for index in range(len(segment) - 1):
+        if segment[index : index + 2] in terms:
+            positions.update((index, index + 1))
+    return positions
+
+
+def _matched_spans(
+    value: str, terms: set[str], avoid: set[str] | None = None
+) -> list[str]:
+    """Merge matched bigrams back into readable spans, in order of appearance.
+
+    Overlapping bigrams rebuild a phrase, but they also leak one character
+    across a boundary. Scored against 推荐系统, the posting's 推荐系统经验 leaves
+    统经 and 经验 unmatched, and the run used to start at 统 — a character the
+    matched 系统 already accounts for — so the reported gap read 统经验.
+
+    ``avoid`` is the opposing term set. A character it also covers is trimmed
+    off the edge of a span, which turns that gap back into 经验.
+
+    The trim is one-way on purpose. It removes a character that the matched
+    side explains, so only the gap passes ``avoid``: applying it to the matched
+    side would shorten a real word (推荐系统 → 推荐系) and lose more than the
+    artifact it removes.
+    """
 
     spans: list[str] = []
     for segment in _cjk_segments(value):
-        current = ""
+        unavailable = _bigram_positions(segment, avoid) if avoid else set()
+
+        runs: list[tuple[int, int]] = []
+        start = -1
+        last = -1
         for index in range(len(segment) - 1):
-            bigram = segment[index : index + 2]
-            if bigram in terms:
-                current = current + segment[index + 1] if current else bigram
-            else:
-                if len(current) >= 2:
-                    spans.append(current)
-                current = ""
-        if len(current) >= 2:
-            spans.append(current)
+            if segment[index : index + 2] in terms:
+                if start < 0:
+                    start = index
+                last = index
+            elif start >= 0:
+                runs.append((start, last + 2))
+                start = -1
+        if start >= 0:
+            runs.append((start, last + 2))
+
+        for run_start, run_end in runs:
+            trimmed_start, trimmed_end = run_start, run_end
+            while trimmed_start < trimmed_end and trimmed_start in unavailable:
+                trimmed_start += 1
+            while trimmed_end > trimmed_start and (trimmed_end - 1) in unavailable:
+                trimmed_end -= 1
+            span = segment[trimmed_start:trimmed_end]
+            # A span trimmed down to one character says less than the untrimmed
+            # run did, so the original is the better of the two.
+            spans.append(
+                span if len(span) >= 2 else segment[run_start:run_end]
+            )
     return spans
 
 
 def _display_terms(
-    value: str, terms: set[str], limit: int = _DISPLAY_LIMIT
+    value: str,
+    terms: set[str],
+    limit: int = _DISPLAY_LIMIT,
+    avoid: set[str] | None = None,
 ) -> list[str]:
     """Report readable terms: ASCII tokens first, then merged Chinese spans."""
 
     ordered = sorted(term for term in terms if term.isascii())
-    ordered.extend(_matched_spans(value, terms))
+    ordered.extend(_matched_spans(value, terms, avoid))
     unique: list[str] = []
     for term in ordered:
         if term in unique:
@@ -126,11 +172,19 @@ def term_set(value: str) -> set[str]:
 
 
 def readable_terms(
-    value: str, terms: set[str], limit: int = _DISPLAY_LIMIT
+    value: str,
+    terms: set[str],
+    limit: int = _DISPLAY_LIMIT,
+    *,
+    avoid: set[str] | None = None,
 ) -> list[str]:
-    """Terms as the text spells them, for a response a human reads."""
+    """Terms as the text spells them, for a response a human reads.
 
-    return _display_terms(value, terms, limit)
+    ``avoid`` names the terms the caller already matched, so a gap does not
+    begin or end on a character those words own.
+    """
+
+    return _display_terms(value, terms, limit, avoid)
 
 
 class CareerAnalystAgent:

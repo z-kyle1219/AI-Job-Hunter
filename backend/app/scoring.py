@@ -190,7 +190,10 @@ def _score_requirement(
             requirement.text, matched, config.display_limit
         ),
         missing_terms=readable_terms(
-            requirement.text, missing, config.display_limit
+            requirement.text,
+            missing,
+            config.display_limit,
+            avoid=matched,
         ),
         evidence=evidence,
     )

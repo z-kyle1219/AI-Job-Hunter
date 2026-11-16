@@ -192,7 +192,9 @@ def _candidate(
         score=score,
         matched=readable_terms(display_text, matched, _DISPLAY_LIMIT),
         aliases_matched=readable_terms(display_text, aliases_hit, _DISPLAY_LIMIT),
-        missing=readable_terms(display_text, missing, _DISPLAY_LIMIT),
+        missing=readable_terms(
+            display_text, missing, _DISPLAY_LIMIT, avoid=matched
+        ),
         reason=reason,
         warnings=list(warnings),
         verification_status=job.verification_status,

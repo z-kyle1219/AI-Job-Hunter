@@ -91,6 +91,30 @@ class ChineseKeywordMatchingTest(unittest.TestCase):
         self.assertEqual(report.score_source, "heuristic")
         self.assertEqual([entry.status for entry in report.breakdown], ["covered"])
 
+    def test_gap_does_not_claim_a_character_from_a_matched_word(self) -> None:
+        # 推荐系统 is matched, so the unmatched 统经/经验 pair used to merge back
+        # into 统经验: a gap that starts on a character 系统 already accounts
+        # for. The reported gap must be 经验.
+        report = CareerAnalystAgent().run(
+            _profile(summary="推荐系统", skills=["推荐系统"], experiences=[]),
+            _job("熟悉推荐系统经验"),
+        )
+
+        self.assertEqual(report.match_points, ["推荐系统"])
+        self.assertEqual(report.gaps, ["经验"])
+
+    def test_partial_gap_stops_at_the_matched_boundary(self) -> None:
+        # The mirror case: 分布式系统 scored against 系统 is a partial, and the
+        # gap is 分布式 rather than the 分布式系 a blind bigram merge produces.
+        report = CareerAnalystAgent().run(
+            _profile(summary="系统", skills=["系统"], experiences=[]),
+            _job("熟悉分布式系统"),
+        )
+
+        self.assertEqual(report.match_points, ["系统"])
+        self.assertEqual(report.gaps, ["分布式"])
+        self.assertEqual(report.breakdown[0].status, "partial")
+
 
 if __name__ == "__main__":
     unittest.main()
